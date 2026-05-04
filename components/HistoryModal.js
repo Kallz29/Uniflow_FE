@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  Share, Linking, Platform, FlatList,
+  Share, Linking, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,17 +17,15 @@ const MONTHS_ID = [
 function DateFilterModal({ visible, onClose, onApply, history }) {
   const now = new Date();
 
-  // Derive available years & months from history
   const availableYears = useMemo(() => {
     const years = [...new Set(history.map((h) => new Date(h.timestamp).getFullYear()))].sort((a, b) => b - a);
     return years.length ? years : [now.getFullYear()];
   }, [history]);
 
   const [selYear,  setSelYear]  = useState(null);
-  const [selMonth, setSelMonth] = useState(null); // 0-indexed, null = semua
-  const [selDay,   setSelDay]   = useState(null); // null = semua
+  const [selMonth, setSelMonth] = useState(null);
+  const [selDay,   setSelDay]   = useState(null);
 
-  // Available months for selected year
   const availableMonths = useMemo(() => {
     if (!selYear) return [];
     const months = [...new Set(
@@ -38,7 +36,6 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
     return months;
   }, [selYear, history]);
 
-  // Available days for selected year+month
   const availableDays = useMemo(() => {
     if (selYear == null || selMonth == null) return [];
     const days = [...new Set(
@@ -53,11 +50,7 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
   }, [selYear, selMonth, history]);
 
   const handleReset = () => { setSelYear(null); setSelMonth(null); setSelDay(null); };
-
-  const handleApply = () => {
-    onApply({ year: selYear, month: selMonth, day: selDay });
-    onClose();
-  };
+  const handleApply = () => { onApply({ year: selYear, month: selMonth, day: selDay }); onClose(); };
 
   const pill = (label, active, onPress, disabled = false) => (
     <TouchableOpacity
@@ -121,10 +114,7 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
               {selYear
                 ? availableMonths.map((m) =>
-                    pill(MONTHS_ID[m], selMonth === m, () => {
-                      setSelMonth(m);
-                      setSelDay(null);
-                    })
+                    pill(MONTHS_ID[m], selMonth === m, () => { setSelMonth(m); setSelDay(null); })
                   )
                 : pill('Pilih tahun dulu', false, null, true)
               }
@@ -136,9 +126,7 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }}>
               {selMonth != null
-                ? availableDays.map((d) =>
-                    pill(String(d), selDay === d, () => setSelDay(d))
-                  )
+                ? availableDays.map((d) => pill(String(d), selDay === d, () => setSelDay(d)))
                 : pill('Pilih bulan dulu', false, null, true)
               }
             </View>
@@ -148,14 +136,9 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
           <View style={{ paddingHorizontal: 16 }}>
             <TouchableOpacity
               onPress={handleApply}
-              style={{
-                backgroundColor: '#7CB9D8', borderRadius: 14,
-                paddingVertical: 13, alignItems: 'center',
-              }}
+              style={{ backgroundColor: '#7CB9D8', borderRadius: 14, paddingVertical: 13, alignItems: 'center' }}
             >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                Terapkan Filter
-              </Text>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Terapkan Filter</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -167,9 +150,15 @@ function DateFilterModal({ visible, onClose, onApply, history }) {
 // ─── HistoryModal ──────────────────────────────────────────
 export default function HistoryModal({ visible, onClose, data }) {
   const { title, color, history = [] } = data;
-  const gradientColors = Array.isArray(color) ? color : [color, color];
 
-  const [showFilter, setShowFilter]   = useState(false);
+  // ── Selalu pakai warna gelap-biru untuk header agar icon terlihat ──
+  // Gradient dari data bisa terlalu terang (biru muda), jadi kita
+  // paksa header pakai warna yang cukup gelap + kontras
+  const rawColors  = Array.isArray(color) ? color : [color, color];
+  // Darken: overlay gradient gelap di atas warna asli via warna header solid
+  const HEADER_COLORS = ['#2E7CA8', '#1A5E8A']; // biru tua — selalu kontras
+
+  const [showFilter,   setShowFilter]   = useState(false);
   const [activeFilter, setActiveFilter] = useState({ year: null, month: null, day: null });
 
   const statusConfig = {
@@ -179,17 +168,24 @@ export default function HistoryModal({ visible, onClose, data }) {
   };
 
   const formatDate = (date) => {
-    const d = date instanceof Date ? date : new Date(date);
-    const today = new Date();
+    // Strip 'Z' agar tidak di-offset +7 jam oleh browser/RN
+    let d;
+    if (typeof date === 'string') {
+      d = new Date(date.replace('Z', ''));
+    } else if (date instanceof Date) {
+      d = date;
+    } else {
+      d = new Date(date);
+    }
+    const today     = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    if (d.toDateString() === today.toDateString()) return `Hari ini, ${timeStr}`;
+    if (d.toDateString() === today.toDateString())     return `Hari ini, ${timeStr}`;
     if (d.toDateString() === yesterday.toDateString()) return `Kemarin, ${timeStr}`;
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
 
-  // Filtered history
   const filteredHistory = useMemo(() => {
     const { year, month, day } = activeFilter;
     if (!year) return history;
@@ -212,14 +208,13 @@ export default function HistoryModal({ visible, onClose, data }) {
   };
 
   const trendMeta = {
-    up:     { icon: 'trending-up',   color: '#16A34A', label: 'Naik' },
-    down:   { icon: 'trending-down', color: '#DC2626', label: 'Turun' },
+    up:     { icon: 'trending-up',   color: '#16A34A', label: 'Naik'   },
+    down:   { icon: 'trending-down', color: '#DC2626', label: 'Turun'  },
     stable: { icon: 'remove',        color: '#8BAFC0', label: 'Stabil' },
   };
 
   const isFiltered = activeFilter.year != null;
 
-  // Filter label chip
   const filterLabel = () => {
     const { year, month, day } = activeFilter;
     if (!year) return null;
@@ -244,8 +239,13 @@ export default function HistoryModal({ visible, onClose, data }) {
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
 
-        {/* Header */}
-        <LinearGradient colors={gradientColors} style={styles.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        {/* ── Header ── */}
+        <LinearGradient
+          colors={HEADER_COLORS}
+          style={styles.header}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
           <View style={styles.headerContent}>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>Riwayat {title}</Text>
@@ -253,14 +253,27 @@ export default function HistoryModal({ visible, onClose, data }) {
                 {filteredHistory.length} data{isFiltered ? ` · ${filterLabel()}` : ' · 3 bulan terakhir'}
               </Text>
             </View>
+
+            {/* Tombol aksi — background solid agar selalu terlihat */}
             <View style={styles.headerBtns}>
-              {/* Filter button */}
-              <TouchableOpacity onPress={() => setShowFilter(true)} style={[styles.headerBtn, isFiltered && { backgroundColor: 'rgba(255,255,255,0.45)' }]}>
-                <Ionicons name={isFiltered ? 'funnel' : 'funnel-outline'} size={17} color="#fff" />
+              <TouchableOpacity
+                onPress={() => setShowFilter(true)}
+                style={[
+                  styles.headerBtn,
+                  isFiltered && { backgroundColor: 'rgba(255,255,255,0.35)' },
+                ]}
+              >
+                <Ionicons
+                  name={isFiltered ? 'funnel' : 'funnel-outline'}
+                  size={17}
+                  color="#fff"
+                />
               </TouchableOpacity>
+
               <TouchableOpacity onPress={handleExport} style={styles.headerBtn}>
                 <Ionicons name="download-outline" size={18} color="#fff" />
               </TouchableOpacity>
+
               <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
                 <Ionicons name="close" size={18} color="#fff" />
               </TouchableOpacity>
@@ -269,10 +282,10 @@ export default function HistoryModal({ visible, onClose, data }) {
 
           {/* Active filter chip */}
           {isFiltered && (
-            <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
+            <View style={{ flexDirection: 'row', marginTop: 10 }}>
               <View style={{
                 flexDirection: 'row', alignItems: 'center', gap: 5,
-                backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 20,
+                backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20,
                 paddingHorizontal: 10, paddingVertical: 4,
               }}>
                 <Ionicons name="calendar" size={11} color="#fff" />
@@ -285,12 +298,16 @@ export default function HistoryModal({ visible, onClose, data }) {
           )}
         </LinearGradient>
 
-        {/* List */}
+        {/* ── List ── */}
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <View style={styles.listWrap}>
             {filteredHistory.length === 0 ? (
               <View style={styles.emptyWrap}>
-                <Ionicons name={isFiltered ? 'search-outline' : 'time-outline'} size={36} color="#C5DDE8" />
+                <Ionicons
+                  name={isFiltered ? 'search-outline' : 'time-outline'}
+                  size={36}
+                  color="#C5DDE8"
+                />
                 <Text style={styles.emptyText}>
                   {isFiltered ? 'Tidak ada data untuk filter ini' : 'Belum ada data riwayat'}
                 </Text>

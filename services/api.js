@@ -112,6 +112,52 @@ export const createDevice = async (deviceData) => {
   return handleResponse(res);
 };
 
+/** PUT /api/devices/:id */
+export const updateDevice = async (id, deviceData) => {
+  const res = await fetch(`${BASE_URL}/devices/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(deviceData),
+  });
+  return handleResponse(res);
+};
+
+/** DELETE /api/devices/:id */
+export const deleteDevice = async (id) => {
+  const res = await fetch(`${BASE_URL}/devices/${id}`, {
+    method: 'DELETE',
+  });
+
+  // 204 No Content — sukses tanpa body
+  if (res.status === 204) return { success: true };
+
+  // 200 dengan body JSON
+  if (res.ok) {
+    try {
+      const json = await res.json();
+      return { success: true, ...json };
+    } catch {
+      return { success: true };
+    }
+  }
+
+  // Error — coba parse body untuk pesan error
+  let errorMsg = `Gagal menghapus device (${res.status})`;
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || text;
+      } catch {
+        errorMsg = text;
+      }
+    }
+  } catch { /* ignore */ }
+
+  throw new Error(errorMsg);
+};
+
 // ============================================
 // CHAT
 // ============================================
@@ -132,9 +178,8 @@ export const getAllChatSessions = async () => {
   return handleResponse(res);
 };
 
-/** PATCH or PUT /api/chat/sessions/:id  — update session title */
+/** PATCH /api/chat/sessions/:id — update session title */
 export const updateChatSession = async (sessionId, title) => {
-  // Try PATCH first, fall back to PUT if not supported
   for (const method of ['PATCH', 'PUT']) {
     try {
       const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}`, {
@@ -144,10 +189,8 @@ export const updateChatSession = async (sessionId, title) => {
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        console.log('[updateChatSession] OK via', method, json);
         return json;
       }
-      console.warn('[updateChatSession]', method, 'returned', res.status);
     } catch (err) {
       console.warn('[updateChatSession]', method, 'error:', err.message);
     }
@@ -171,27 +214,38 @@ export const sendChatMessage = async (sessionId, message) => {
   return handleResponse(res);
 };
 
+/** DELETE /api/chat/sessions/:id */
 export const deleteChatSession = async (sessionId) => {
-  console.log('API DELETE START:', sessionId);
-
   const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}`, {
     method: 'DELETE',
   });
 
-  console.log('API DELETE STATUS:', res.status);
+  // 204 No Content — sukses tanpa body
+  if (res.status === 204) return { success: true };
 
-  // ✅ kalau sukses (200 / 204 / dll)
-  if (res.ok) return { success: true };
-
-  // ❗ fallback parsing
-  let text;
-  try {
-    text = await res.text();
-  } catch {
-    throw new Error('Gagal membaca response');
+  // 200 dengan body JSON
+  if (res.ok) {
+    try {
+      const json = await res.json();
+      return { success: true, ...json };
+    } catch {
+      return { success: true };
+    }
   }
 
-  console.log('DELETE ERROR RESPONSE:', text);
+  // Error — coba parse body untuk pesan error
+  let errorMsg = `Gagal menghapus sesi (${res.status})`;
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || text;
+      } catch {
+        errorMsg = text;
+      }
+    }
+  } catch { /* ignore */ }
 
-  throw new Error(text || 'Gagal menghapus');
+  throw new Error(errorMsg);
 };

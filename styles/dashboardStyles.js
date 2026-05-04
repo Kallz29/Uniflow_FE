@@ -31,18 +31,10 @@ export const dashboardStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  // ── UPDATED: lebih besar ──
-  logoCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // ── pure logo, no box container ──
   logo: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
   },
   headerTitle: {
     fontSize: 20,

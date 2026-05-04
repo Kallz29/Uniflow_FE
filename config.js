@@ -4,4 +4,4 @@
 // Contoh: 'http://192.168.1.10:3000/api'
 // ============================================
 
-export const BASE_URL = 'https://water-quality-api-production-9b67.up.railway.app/api';
+export const BASE_URL = 'https://api.uniflow.me/api';
