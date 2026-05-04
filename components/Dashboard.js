@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, Dimensions,
-  TextInput, Alert,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,7 +34,6 @@ const mapWQIStatus = (statusStr) => {
   if (s === 'baik')   return 'good';
   if (s === 'sedang') return 'warning';
   if (s === 'buruk')  return 'danger';
-  // fallback: already an internal key
   if (s === 'good' || s === 'warning' || s === 'danger') return s;
   return 'good';
 };
@@ -144,6 +143,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
   const [showOverallHistory,  setShowOverallHistory]   = useState(false);
   const [showAlertsModal,     setShowAlertsModal]      = useState(false);
   const [showThresholdModal,  setShowThresholdModal]   = useState(false);
+  const [showResetConfirm,    setShowResetConfirm]     = useState(false);
   const [thresholdForm,       setThresholdForm]        = useState(null);
   const [thresholdSaving,     setThresholdSaving]      = useState(false);
   const [thresholdMsg,        setThresholdMsg]         = useState(null);
@@ -182,7 +182,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
       setAlerts(alertList);
       setUnreadCount(alertList.filter((a) => !a.is_read).length);
 
-      // ── Gunakan wqi_score & wqi_status langsung dari backend ──
       const backendScore  = latest.wqi_score != null ? Math.round(latest.wqi_score) : null;
       const backendStatus = mapWQIStatus(latest.wqi_status);
 
@@ -272,27 +271,23 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
     }
   };
 
-  const handleResetThreshold = () => {
-    Alert.alert(
-      'Reset Threshold',
-      'Kembalikan semua threshold ke nilai default?',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Reset', style: 'destructive',
-          onPress: async () => {
-            try {
-              await resetThreshold();
-              setThresholdMsg({ type: 'ok', text: 'Threshold direset ke default.' });
-              fetchData();
-              setTimeout(() => setShowThresholdModal(false), 1200);
-            } catch (err) {
-              setThresholdMsg({ type: 'err', text: err.message });
-            }
-          },
-        },
-      ]
-    );
+  // Buka modal konfirmasi reset (tanpa Alert)
+  const handleResetThreshold = () => setShowResetConfirm(true);
+
+  // Eksekusi reset setelah user konfirmasi
+  const doResetThreshold = async () => {
+    setShowResetConfirm(false);
+    try {
+      await resetThreshold();
+      const freshRes = await getThreshold();
+      const freshTh  = freshRes.data || {};
+      setThreshold(freshTh);
+      setThresholdForm({ ...freshTh });
+      setThresholdMsg({ type: 'ok', text: 'Threshold direset ke default.' });
+      fetchData();
+    } catch (err) {
+      setThresholdMsg({ type: 'err', text: err.message });
+    }
   };
 
   const getHistoryForParam = (id) => {
@@ -674,6 +669,77 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
                 <Text style={{ color: '#F87171', fontWeight: '700', fontSize: 14 }}>Reset ke Default</Text>
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════
+          ── Reset Confirm Modal ──
+      ══════════════════════════════════════════════════ */}
+      <Modal
+        visible={showResetConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowResetConfirm(false)}
+      >
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center', alignItems: 'center', padding: 32,
+        }}>
+          <View style={{
+            backgroundColor: '#fff', borderRadius: 20,
+            padding: 24, width: '100%', maxWidth: 340,
+          }}>
+            {/* Icon */}
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View style={{
+                width: 52, height: 52, borderRadius: 26,
+                backgroundColor: '#FEE2E2',
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Ionicons name="refresh-outline" size={26} color="#F87171" />
+              </View>
+            </View>
+
+            {/* Title & message */}
+            <Text style={{
+              fontSize: 16, fontWeight: '700', color: '#1A3040',
+              textAlign: 'center', marginBottom: 8,
+            }}>
+              Reset Threshold
+            </Text>
+            <Text style={{
+              fontSize: 13, color: '#6B7280', textAlign: 'center',
+              lineHeight: 20, marginBottom: 24,
+            }}>
+              Kembalikan semua threshold ke nilai default?{'\n'}
+              Tindakan ini tidak dapat dibatalkan.
+            </Text>
+
+            {/* Buttons */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowResetConfirm(false)}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1, borderWidth: 1.5, borderColor: '#D1D5DB',
+                  borderRadius: 12, padding: 13, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#6B7280', fontWeight: '600', fontSize: 14 }}>Batal</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={doResetThreshold}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1, backgroundColor: '#F87171',
+                  borderRadius: 12, padding: 13, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Reset</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

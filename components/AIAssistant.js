@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
-  TouchableWithoutFeedback, Alert,
+  TouchableWithoutFeedback, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '../styles/aiAssistantStyles';
@@ -51,17 +51,18 @@ export default function AIAssistant({ onBack }) {
   const [messages, setMessages] = useState([{
     id: '1', text: GREETING, sender: 'ai', timestamp: new Date(),
   }]);
-  const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState([]);
+  const [inputText,        setInputText]        = useState('');
+  const [isTyping,         setIsTyping]         = useState(false);
+  const [drawerOpen,       setDrawerOpen]       = useState(false);
+  const [chatHistory,      setChatHistory]      = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [isFirstMessage, setIsFirstMessage] = useState(true);
-  const [loadingSession, setLoadingSession] = useState(true);
-  const [sessionError, setSessionError] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+  const [isFirstMessage,   setIsFirstMessage]   = useState(true);
+  const [loadingSession,   setLoadingSession]   = useState(true);
+  const [sessionError,     setSessionError]     = useState(null);
+  const [deletingId,       setDeletingId]       = useState(null);
+  const [deleteTarget,     setDeleteTarget]     = useState(null); // { id, preview }
 
-  const scrollRef = useRef(null);
+  const scrollRef  = useRef(null);
   const typingAnim = useRef(new Animated.Value(0)).current;
   const drawerAnim = useRef(new Animated.Value(-280)).current;
 
@@ -162,46 +163,45 @@ export default function AIAssistant({ onBack }) {
     }
   };
 
+  // Buka modal konfirmasi delete (tanpa Alert)
   const handleDeleteSession = (sessionId, sessionPreview) => {
-    Alert.alert(
-      'Hapus Sesi',
-      `Hapus sesi "${sessionPreview}"?\n\nSemua pesan dalam sesi ini akan dihapus permanen.`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingId(sessionId);
-            try {
-              await deleteChatSession(sessionId);
+    setDeleteTarget({ id: sessionId, preview: sessionPreview });
+  };
 
-              if (sessionId === currentSessionId) {
-                // Ambil sesi tersisa setelah hapus
-                const remaining = (await refreshHistory()).filter((s) => s.id !== sessionId);
-                if (remaining.length > 0) {
-                  setCurrentSessionId(remaining[0].id);
-                  await loadMessagesForSession(remaining[0].id);
-                } else {
-                  // Tidak ada sesi tersisa — buat baru
-                  const res = await createChatSession('Sesi Baru');
-                  const newId = res.data.id;
-                  setCurrentSessionId(newId);
-                  setMessages([{ id: '1', text: GREETING_SHORT, sender: 'ai', timestamp: new Date() }]);
-                  setIsFirstMessage(true);
-                }
-              }
+  // Eksekusi delete setelah user konfirmasi
+  const doDeleteSession = async () => {
+    if (!deleteTarget) return;
+    const { id: sessionId } = deleteTarget;
+    setDeleteTarget(null);
+    setDeletingId(sessionId);
+    try {
+      await deleteChatSession(sessionId);
 
-              await refreshHistory();
-            } catch (err) {
-              Alert.alert('Gagal Menghapus', err.message);
-            } finally {
-              setDeletingId(null);
-            }
-          },
-        },
-      ]
-    );
+      if (sessionId === currentSessionId) {
+        const remaining = (await refreshHistory()).filter((s) => s.id !== sessionId);
+        if (remaining.length > 0) {
+          setCurrentSessionId(remaining[0].id);
+          await loadMessagesForSession(remaining[0].id);
+        } else {
+          const res = await createChatSession('Sesi Baru');
+          const newId = res.data.id;
+          setCurrentSessionId(newId);
+          setMessages([{ id: '1', text: GREETING_SHORT, sender: 'ai', timestamp: new Date() }]);
+          setIsFirstMessage(true);
+        }
+      }
+
+      await refreshHistory();
+    } catch (err) {
+      setMessages((p) => [...p, {
+        id: Date.now().toString(),
+        text: 'Gagal menghapus sesi: ' + err.message,
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   useEffect(() => {
@@ -450,6 +450,81 @@ export default function AIAssistant({ onBack }) {
           )}
         </ScrollView>
       </Animated.View>
+
+      {/* ══════════════════════════════════════════════════
+          ── Delete Confirm Modal ──
+      ══════════════════════════════════════════════════ */}
+      <Modal
+        visible={!!deleteTarget}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'center', alignItems: 'center', padding: 32,
+        }}>
+          <View style={{
+            backgroundColor: '#fff', borderRadius: 20,
+            padding: 24, width: '100%', maxWidth: 340,
+          }}>
+            {/* Icon */}
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View style={{
+                width: 52, height: 52, borderRadius: 26,
+                backgroundColor: '#FEE2E2',
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                <Ionicons name="trash-outline" size={26} color="#F87171" />
+              </View>
+            </View>
+
+            {/* Title & message */}
+            <Text style={{
+              fontSize: 16, fontWeight: '700', color: '#1A3040',
+              textAlign: 'center', marginBottom: 8,
+            }}>
+              Hapus Sesi
+            </Text>
+            <Text style={{
+              fontSize: 13, color: '#6B7280', textAlign: 'center',
+              lineHeight: 20, marginBottom: 24,
+            }}>
+              Hapus sesi{'\n'}
+              <Text style={{ fontWeight: '600', color: '#1A3040' }}>
+                "{deleteTarget?.preview}"
+              </Text>
+              ?{'\n'}Semua pesan akan dihapus permanen.
+            </Text>
+
+            {/* Buttons */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setDeleteTarget(null)}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1, borderWidth: 1.5, borderColor: '#D1D5DB',
+                  borderRadius: 12, padding: 13, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#6B7280', fontWeight: '600', fontSize: 14 }}>Batal</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={doDeleteSession}
+                activeOpacity={0.85}
+                style={{
+                  flex: 1, backgroundColor: '#F87171',
+                  borderRadius: 12, padding: 13, alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Hapus</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 }

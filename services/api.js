@@ -112,12 +112,16 @@ export const createDevice = async (deviceData) => {
   return handleResponse(res);
 };
 
-/** PUT /api/devices/:id */
-export const updateDevice = async (id, deviceData) => {
+/**
+ * PUT /api/devices/:id
+ * Body: { location: string }
+ * Contoh: updateDevice(1, { location: 'Saluran Air Utama GKU' })
+ */
+export const updateDevice = async (id, { location }) => {
   const res = await fetch(`${BASE_URL}/devices/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(deviceData),
+    body: JSON.stringify({ location }),
   });
   return handleResponse(res);
 };
