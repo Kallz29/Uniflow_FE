@@ -7,12 +7,14 @@ import AIAssistant from './components/AIAssistant';
 import WiFiManager from './components/WifiManager';
 import { BASE_URL } from './config';
 
-// Cek koneksi ke backend UniFlow
-const checkServerConnection = async () => {
+const ESP_STATUS_URL = 'http://192.168.4.1/api/wifi/status';
+
+// Cek apakah HP lagi konek ke ESP32 AP
+const checkESPReachable = async () => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
-    const res = await fetch(`${BASE_URL}/sensors/latest`, { signal: controller.signal });
+    const res = await fetch(ESP_STATUS_URL, { signal: controller.signal });
     clearTimeout(timeout);
     return res.ok;
   } catch {
@@ -26,13 +28,14 @@ export default function App() {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const isConnected = await checkServerConnection();
-      if (isConnected) {
-        setCurrentScreen('dashboard');
-      } else {
+      // Kalau bisa ping ESP → HP lagi konek ke UniFlow-Setup → tampilkan WiFi Manager
+      const espReachable = await checkESPReachable();
+      if (espReachable) {
         setCurrentScreen('wifi-manager');
+      } else {
+        setCurrentScreen('dashboard');
       }
-    }, 3000); // tunggu splash selesai
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 

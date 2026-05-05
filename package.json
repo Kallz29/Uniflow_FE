@@ -16,6 +16,7 @@
     "expo-font": "~12.0.10",
     "expo-linear-gradient": "~13.0.2",
     "expo-modules-core": "~1.12.26",
+    "expo-network": "~6.0.1",
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
     "react-dom": "^18.2.0",

@@ -11,9 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#7CB9D8"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uniflow.mobile"
@@ -23,13 +21,24 @@
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#7CB9D8"
       },
-      "package": "com.uniflow.mobile"
+      "package": "com.uniflow.mobile",
+      "permissions": [
+  "ACCESS_FINE_LOCATION",
+  "ACCESS_COARSE_LOCATION",
+  "ACCESS_WIFI_STATE",
+  "CHANGE_WIFI_STATE",
+  "INTERNET",
+  "ACCESS_NETWORK_STATE"
+]
     },
     "web": {
       "favicon": "./assets/logo.png"
     },
-    "plugins": [
-      "expo-font"
-    ]
+    "plugins": ["expo-font"],
+    "extra": {
+      "eas": {
+        "projectId": "736a14f6-f773-4e39-8b62-651c1860d74c"
+      }
+    }
   }
 }

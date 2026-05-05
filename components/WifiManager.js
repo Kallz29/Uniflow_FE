@@ -8,14 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // ─── Konfigurasi ────────────────────────────────────────────
-const ESP_BASE = 'http://192.168.4.1/api/wifi';
-const BACKEND_URL = 'https://api.uniflow.me/api';
+const ESP_BASE     = 'http://192.168.4.1/api/wifi';
+const BACKEND_URL  = 'https://api.uniflow.me/api';
 const SCAN_INTERVAL = 15000; // auto-refresh scan tiap 15 detik
 
 // ─── API helpers ────────────────────────────────────────────
-const espFetch = async (path, options = {}) => {
+const espFetch = async (path, options = {}, timeoutMs = 8000) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000); // naik dari 8000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${ESP_BASE}${path}`, {
       ...options,
@@ -29,14 +29,32 @@ const espFetch = async (path, options = {}) => {
   }
 };
 
-const scanNetworks  = ()           => espFetch('/scan');
-const getWifiStatus = ()           => espFetch('/status');
-const connectWifi   = (ssid, pass) => espFetch('/connect', {
+// ─── scanNetworks dengan async retry ────────────────────────
+const scanNetworks = async (retryCount = 0) => {
+  const MAX_RETRY = 5;
+  const RETRY_DELAY = 2000;
+
+  const result = await espFetch('/scan', {}, 10000);
+
+  // ESP masih scanning async → tunggu lalu retry
+  if (result.scanning === true) {
+    if (retryCount >= MAX_RETRY) {
+      return { networks: [] };
+    }
+    await new Promise(r => setTimeout(r, RETRY_DELAY));
+    return scanNetworks(retryCount + 1);
+  }
+
+  return result;
+};
+
+const getWifiStatus  = ()            => espFetch('/status', {}, 5000);
+const connectWifi    = (ssid, pass)  => espFetch('/connect', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ ssid, password: pass }),
-});
-const disconnectWifi = () => espFetch('/disconnect', { method: 'POST' });
+}, 12000);
+const disconnectWifi = () => espFetch('/disconnect', { method: 'POST' }, 5000);
 
 // ─── Signal strength → icon & color ─────────────────────────
 const getSignalInfo = (rssi) => {
@@ -117,10 +135,10 @@ const NetworkItem = ({ network, onPress, isConnected }) => {
 
 // ─── Komponen: Connect Modal ─────────────────────────────────
 const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
-  const [password,    setPassword]    = useState('');
-  const [showPass,    setShowPass]    = useState(false);
-  const [connecting,  setConnecting]  = useState(false);
-  const [error,       setError]       = useState(null);
+  const [password,   setPassword]   = useState('');
+  const [showPass,   setShowPass]   = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [error,      setError]      = useState(null);
   const slideAnim = useRef(new Animated.Value(300)).current;
 
   useEffect(() => {
@@ -298,11 +316,12 @@ export default function WiFiManager({ onConnected }) {
   const [showConnect,   setShowConnect]   = useState(false);
   const [successSSID,   setSuccessSSID]   = useState(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [scanHint,      setScanHint]      = useState(null); // hint "ESP masih scanning..."
 
   // Animasi header
-  const headerOpac  = useRef(new Animated.Value(0)).current;
-  const headerY     = useRef(new Animated.Value(-20)).current;
-  const spinAnim    = useRef(new Animated.Value(0)).current;
+  const headerOpac = useRef(new Animated.Value(0)).current;
+  const headerY    = useRef(new Animated.Value(-20)).current;
+  const spinAnim   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -325,37 +344,46 @@ export default function WiFiManager({ onConnected }) {
   const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   const doScan = useCallback(async () => {
-  setScanning(true);
-  setScanError(null);
-  try {
-    // Pisah — jangan Promise.all, biar salah satu gagal tidak block keduanya
-    let scanResult = { networks: [] };
-    let statusResult = null;
+    setScanning(true);
+    setScanError(null);
+    setScanHint(null);
 
     try {
-      scanResult = await scanNetworks();
-    } catch (e) {
-      console.warn('Scan gagal:', e.message);
+      let scanResult  = { networks: [] };
+      let statusResult = null;
+
+      // Scan dengan async retry
+      try {
+        setScanHint('ESP32 sedang memindai jaringan...');
+        scanResult = await scanNetworks();
+        setScanHint(null);
+      } catch (e) {
+        console.warn('Scan gagal:', e.message);
+        setScanHint(null);
+      }
+
+      // Ambil status WiFi ESP
+      try {
+        statusResult = await getWifiStatus();
+      } catch (e) {
+        console.warn('Status gagal:', e.message);
+      }
+
+      // Kedua-duanya gagal → ESP tidak bisa dijangkau
+      if (scanResult.networks.length === 0 && !statusResult) {
+        setScanError(
+          'Tidak dapat terhubung ke ESP32.\nPastikan HP terhubung ke WiFi "UniFlow-Setup".'
+        );
+        return;
+      }
+
+      setNetworks(scanResult.networks || []);
+      if (statusResult) setWifiStatus(statusResult);
+
+    } finally {
+      setScanning(false);
     }
-
-    try {
-      statusResult = await getWifiStatus();
-    } catch (e) {
-      console.warn('Status gagal:', e.message);
-    }
-
-    if (scanResult.networks.length === 0 && !statusResult) {
-      setScanError('Tidak dapat terhubung ke ESP32.\nPastikan HP terhubung ke WiFi "UniFlow-Setup".');
-      return;
-    }
-
-    setNetworks(scanResult.networks || []);
-    if (statusResult) setWifiStatus(statusResult);
-
-  } finally {
-    setScanning(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     doScan();
@@ -369,34 +397,35 @@ export default function WiFiManager({ onConnected }) {
   };
 
   const handleSuccess = async (ssid) => {
-  setShowConnect(false);
-  setSuccessSSID(ssid);
+    setShowConnect(false);
+    setSuccessSSID(ssid);
 
-  // Setelah ESP konek ke WiFi baru, 192.168.4.1 tidak bisa diakses lagi.
-  // Poll ke backend UniFlow sebagai indikator HP sudah online.
-  let attempts = 0;
-  const poll = setInterval(async () => {
-    attempts++;
-    try {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`${BACKEND_URL}/sensors/latest`, {
-        signal: controller.signal,
-      });
-      clearTimeout(t);
-      if (res.ok) {
+    // Setelah ESP konek ke WiFi baru, 192.168.4.1 tidak bisa diakses lagi.
+    // Poll ke backend UniFlow sebagai indikator koneksi berhasil end-to-end.
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`${BACKEND_URL}/sensors/latest`, {
+          signal: controller.signal,
+        });
+        clearTimeout(t);
+        if (res.ok) {
+          clearInterval(poll);
+          setWifiStatus({ connected: true, ssid });
+          setTimeout(() => onConnected?.(), 1000);
+        }
+      } catch { /* belum konek, lanjut poll */ }
+
+      if (attempts >= 20) {
+        // Timeout 20 detik → tetap lanjut ke dashboard
         clearInterval(poll);
-        setWifiStatus({ connected: true, ssid });
-        setTimeout(() => onConnected?.(), 1000);
+        onConnected?.();
       }
-    } catch { /* belum konek */ }
-    if (attempts >= 20) {
-      // Timeout 20 detik — tetap lanjut ke dashboard
-      clearInterval(poll);
-      onConnected?.();
-    }
-  }, 1000);
-};
+    }, 1000);
+  };
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
@@ -502,7 +531,8 @@ export default function WiFiManager({ onConnected }) {
       }}>
         <Ionicons name="information-circle-outline" size={16} color="#5AA3C8" style={{ marginTop: 1 }} />
         <Text style={{ fontSize: 12, color: '#4A8BAA', flex: 1, lineHeight: 17 }}>
-          Pastikan HP kamu terhubung ke WiFi <Text style={{ fontWeight: '700' }}>"UniFlow-Setup"</Text> sebelum memilih jaringan.
+          Pastikan HP kamu terhubung ke WiFi{' '}
+          <Text style={{ fontWeight: '700' }}>"UniFlow-Setup"</Text> sebelum memilih jaringan.
         </Text>
       </View>
 
@@ -511,12 +541,18 @@ export default function WiFiManager({ onConnected }) {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10,
       }}>
-        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>
-          Jaringan Tersedia
-          {!scanning && networks.length > 0 && (
-            <Text style={{ fontWeight: '400', color: '#8BAFC0' }}> ({networks.length})</Text>
+        <View>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>
+            Jaringan Tersedia
+            {!scanning && networks.length > 0 && (
+              <Text style={{ fontWeight: '400', color: '#8BAFC0' }}> ({networks.length})</Text>
+            )}
+          </Text>
+          {/* Hint async scan */}
+          {scanHint && (
+            <Text style={{ fontSize: 10, color: '#8BAFC0', marginTop: 2 }}>{scanHint}</Text>
           )}
-        </Text>
+        </View>
         <TouchableOpacity
           onPress={doScan}
           disabled={scanning}
@@ -574,7 +610,9 @@ export default function WiFiManager({ onConnected }) {
           /* Loading state */
           <View style={{ paddingVertical: 48, alignItems: 'center', gap: 14 }}>
             <ActivityIndicator size="large" color="#7CB9D8" />
-            <Text style={{ fontSize: 13, color: '#8BAFC0' }}>Mencari jaringan WiFi...</Text>
+            <Text style={{ fontSize: 13, color: '#8BAFC0' }}>
+              {scanHint || 'Mencari jaringan WiFi...'}
+            </Text>
           </View>
         ) : networks.length === 0 ? (
           /* Empty state */
@@ -588,7 +626,7 @@ export default function WiFiManager({ onConnected }) {
         ) : (
           /* Network list */
           <>
-            {/* Success banner */}
+            {/* Success banner — menunggu konek */}
             {successSSID && !wifiStatus?.connected && (
               <View style={{
                 backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12,
@@ -601,6 +639,8 @@ export default function WiFiManager({ onConnected }) {
                 </Text>
               </View>
             )}
+
+            {/* Success banner — sudah konek */}
             {wifiStatus?.connected && (
               <View style={{
                 backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12,
