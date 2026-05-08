@@ -12,6 +12,7 @@ import {
   getAllSensors, getLatestSensor, getSensorStats,
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
   updateThreshold, resetThreshold,
+  getAllDevices, updateDevice,
 } from '../services/api';
 import { dashboardStyles as styles } from '../styles/dashboardStyles';
 
@@ -27,7 +28,6 @@ const getStatus = (value, min, max) => {
 
 const STATUS_DOT = { good: '#4ADE80', warning: '#FCD34D', danger: '#F87171' };
 
-// ─── Map backend wqi_status string → internal key ──────────
 const mapWQIStatus = (statusStr) => {
   if (!statusStr) return 'good';
   const s = statusStr.toLowerCase();
@@ -84,7 +84,6 @@ const mapSensorToCards = (data, threshold) => {
   ];
 };
 
-// ─── Strip 'Z' agar browser tidak auto +7 jam ──────────────
 const parseLocalDate = (str) => {
   if (!str) return new Date();
   return new Date(typeof str === 'string' ? str.replace('Z', '') : str);
@@ -139,15 +138,32 @@ const ParamCard = ({ item, onPress }) => (
 
 // ─── Dashboard ─────────────────────────────────────────────
 export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
+  // ── Navigation & History ──
   const [selectedParameter,   setSelectedParameter]   = useState(null);
   const [showOverallHistory,  setShowOverallHistory]   = useState(false);
+
+  // ── Alerts ──
   const [showAlertsModal,     setShowAlertsModal]      = useState(false);
+
+  // ── Settings Menu ──
+  const [showSettingsMenu,    setShowSettingsMenu]     = useState(false);
+
+  // ── Threshold Modal ──
   const [showThresholdModal,  setShowThresholdModal]   = useState(false);
   const [showResetConfirm,    setShowResetConfirm]     = useState(false);
   const [thresholdForm,       setThresholdForm]        = useState(null);
   const [thresholdSaving,     setThresholdSaving]      = useState(false);
   const [thresholdMsg,        setThresholdMsg]         = useState(null);
 
+  // ── Device Modal ──
+  const [showDeviceModal,     setShowDeviceModal]      = useState(false);
+  const [devices,             setDevices]              = useState([]);
+  const [deviceLoading,       setDeviceLoading]        = useState(false);
+  const [deviceSaving,        setDeviceSaving]         = useState(null);
+  const [deviceMsg,           setDeviceMsg]            = useState(null);
+  const [editingLocation,     setEditingLocation]      = useState({});
+
+  // ── Sensor/Alert/Threshold Data ──
   const [qualityData,  setQualityData]  = useState([]);
   const [overallData,  setOverallData]  = useState(null);
   const [historyList,  setHistoryList]  = useState([]);
@@ -161,6 +177,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [error,        setError]        = useState(null);
 
+  // ─── Fetch data ──────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
       setError(null);
@@ -218,6 +235,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
+  // ─── Alert handlers ──────────────────────────────────────
   const handleMarkRead = async (id) => {
     try {
       await markAlertRead(id);
@@ -234,7 +252,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
     } catch (err) { console.error(err); }
   };
 
+  // ─── Settings Menu ───────────────────────────────────────
+  const openSettingsMenu = () => setShowSettingsMenu(true);
+
+  // ─── Threshold handlers ──────────────────────────────────
   const openThreshold = () => {
+    setShowSettingsMenu(false);
     setThresholdForm(threshold ? { ...threshold } : {
       ph_min: '6.5', ph_max: '8.5',
       temp_min: '25', temp_max: '30',
@@ -271,10 +294,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
     }
   };
 
-  // Buka modal konfirmasi reset (tanpa Alert)
   const handleResetThreshold = () => setShowResetConfirm(true);
 
-  // Eksekusi reset setelah user konfirmasi
   const doResetThreshold = async () => {
     setShowResetConfirm(false);
     try {
@@ -290,6 +311,49 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
     }
   };
 
+  // ─── Device handlers ─────────────────────────────────────
+  const openDeviceModal = async () => {
+    setShowSettingsMenu(false);
+    setDeviceMsg(null);
+    setShowDeviceModal(true);
+    setDeviceLoading(true);
+    try {
+      const res  = await getAllDevices();
+      const list = res.data || [];
+      console.log('list[0]:', JSON.stringify(list[0]));
+      setDevices(list);
+      const init = {};
+      list.forEach((d) => { init[d.id] = d.location || ''; });
+      setEditingLocation(init);
+    } catch (err) {
+      setDeviceMsg({ type: 'err', text: err.message });
+    } finally {
+      setDeviceLoading(false);
+    }
+  };
+
+  const handleSaveDeviceLocation = async (deviceId) => {
+    const loc = editingLocation[deviceId]?.trim();
+    if (!loc) {
+      setDeviceMsg({ type: 'err', text: 'Lokasi tidak boleh kosong' });
+      return;
+    }
+    setDeviceSaving(deviceId);
+    setDeviceMsg(null);
+    try {
+      await updateDevice(deviceId, { location: loc });
+      setDevices((prev) =>
+        prev.map((d) => d.id === deviceId ? { ...d, location: loc } : d)
+      );
+      setDeviceMsg({ type: 'ok', text: 'Lokasi perangkat berhasil diperbarui!' });
+    } catch (err) {
+      setDeviceMsg({ type: 'err', text: err.message });
+    } finally {
+      setDeviceSaving(null);
+    }
+  };
+
+  // ─── History helpers ─────────────────────────────────────
   const getHistoryForParam = (id) => {
     const map = {
       1: ['ph',          'pH'],
@@ -376,8 +440,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
             <TouchableOpacity onPress={onNavigateToAI} style={styles.statusIndicator}>
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
-            {/* Threshold */}
-            <TouchableOpacity onPress={openThreshold} style={styles.statusIndicator}>
+            {/* Settings */}
+            <TouchableOpacity onPress={openSettingsMenu} style={styles.statusIndicator}>
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -401,7 +465,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
         </View>
       ) : (
         <>
-          {/* ── Status Card ── */}
           <View style={styles.statusSection}>
             <StatusCard
               onHistoryClick={() => setShowOverallHistory(true)}
@@ -410,33 +473,24 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
             />
           </View>
 
-          {/* ── Stats Strip ── */}
           {stats && (
             <View style={styles.statsStrip}>
               {[
                 {
                   label: 'Avg pH',
-                  value: stats.avg_ph != null
-                    ? String(parseFloat(stats.avg_ph).toFixed(1))
-                    : '-',
+                  value: stats.avg_ph != null ? String(parseFloat(stats.avg_ph).toFixed(1)) : '-',
                 },
                 {
                   label: 'Avg Suhu',
-                  value: stats.avg_temperature != null
-                    ? `${parseFloat(stats.avg_temperature).toFixed(1)}°C`
-                    : '-',
+                  value: stats.avg_temperature != null ? `${parseFloat(stats.avg_temperature).toFixed(1)}°C` : '-',
                 },
                 {
                   label: 'Avg TDS',
-                  value: stats.avg_tds != null
-                    ? String(parseFloat(stats.avg_tds).toFixed(0))
-                    : '-',
+                  value: stats.avg_tds != null ? String(parseFloat(stats.avg_tds).toFixed(0)) : '-',
                 },
                 {
                   label: 'Avg TSS',
-                  value: stats.avg_turbidity != null
-                    ? String(parseFloat(stats.avg_turbidity).toFixed(1))
-                    : '-',
+                  value: stats.avg_turbidity != null ? String(parseFloat(stats.avg_turbidity).toFixed(1)) : '-',
                 },
               ].map((s) => (
                 <View key={s.label} style={styles.statItem}>
@@ -447,7 +501,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
             </View>
           )}
 
-          {/* ── Section Header ── */}
           <View style={styles.metricsSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Parameter Air</Text>
@@ -455,7 +508,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
             </View>
           </View>
 
-          {/* ── Parameter Cards ── */}
           <View style={styles.cardsGrid}>
             {cardRows.map((row, rowIdx) => (
               <View key={rowIdx} style={styles.cardRow}>
@@ -470,7 +522,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
             ))}
           </View>
 
-          {/* ── Info Card ── */}
           <View style={styles.infoSection}>
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
@@ -482,6 +533,106 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
           </View>
         </>
       )}
+
+      {/* ══════════════════════════════════════════════════
+          ── Settings Menu Modal ──
+      ══════════════════════════════════════════════════ */}
+      <Modal
+        visible={showSettingsMenu}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSettingsMenu(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+          <View style={{
+            backgroundColor: '#fff',
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            paddingBottom: 36,
+          }}>
+            {/* Handle bar */}
+            <View style={{ alignItems: 'center', paddingTop: 12, marginBottom: 4 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1E8F5' }} />
+            </View>
+
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+              paddingHorizontal: 20, paddingVertical: 14,
+              borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
+            }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A3040' }}>Pengaturan</Text>
+              <TouchableOpacity onPress={() => setShowSettingsMenu(false)}>
+                <Ionicons name="close" size={22} color="#8BAFC0" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Menu items */}
+            <View style={{ padding: 16, gap: 12 }}>
+
+              {/* Threshold */}
+              <TouchableOpacity
+                onPress={openThreshold}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  backgroundColor: '#F0F9FF',
+                  borderRadius: 16, padding: 16,
+                  borderWidth: 1.5, borderColor: '#D1E8F5',
+                }}
+              >
+                <View style={{
+                  width: 46, height: 46, borderRadius: 23,
+                  backgroundColor: '#5AA3C8',
+                  justifyContent: 'center', alignItems: 'center',
+                  marginRight: 14,
+                }}>
+                  <Ionicons name="options-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A3040' }}>
+                    Pengaturan Threshold
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>
+                    Atur batas min &amp; maks tiap parameter
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />
+              </TouchableOpacity>
+
+              {/* Device & Location */}
+              <TouchableOpacity
+                onPress={openDeviceModal}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  backgroundColor: '#F0F9FF',
+                  borderRadius: 16, padding: 16,
+                  borderWidth: 1.5, borderColor: '#D1E8F5',
+                }}
+              >
+                <View style={{
+                  width: 46, height: 46, borderRadius: 23,
+                  backgroundColor: '#3E8FB8',
+                  justifyContent: 'center', alignItems: 'center',
+                  marginRight: 14,
+                }}>
+                  <Ionicons name="hardware-chip-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A3040' }}>
+                    Perangkat &amp; Lokasi
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>
+                    Kelola nama lokasi setiap perangkat
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />
+              </TouchableOpacity>
+
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ══════════════════════════════════════════════════
           ── Alerts Modal ──
@@ -560,12 +711,19 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
           <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%' }}>
+            {/* Header */}
             <View style={{
               flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
               padding: 16, borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
             }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="settings-outline" size={18} color="#5AA3C8" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TouchableOpacity
+                  onPress={() => { setShowThresholdModal(false); setShowSettingsMenu(true); }}
+                  style={{ marginRight: 2 }}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#5AA3C8" />
+                </TouchableOpacity>
+                <Ionicons name="options-outline" size={18} color="#5AA3C8" />
                 <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>Pengaturan Threshold</Text>
               </View>
               <TouchableOpacity onPress={() => setShowThresholdModal(false)}>
@@ -686,11 +844,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
           flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
           justifyContent: 'center', alignItems: 'center', padding: 32,
         }}>
-          <View style={{
-            backgroundColor: '#fff', borderRadius: 20,
-            padding: 24, width: '100%', maxWidth: 340,
-          }}>
-            {/* Icon */}
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340 }}>
             <View style={{ alignItems: 'center', marginBottom: 16 }}>
               <View style={{
                 width: 52, height: 52, borderRadius: 26,
@@ -700,23 +854,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
                 <Ionicons name="refresh-outline" size={26} color="#F87171" />
               </View>
             </View>
-
-            {/* Title & message */}
-            <Text style={{
-              fontSize: 16, fontWeight: '700', color: '#1A3040',
-              textAlign: 'center', marginBottom: 8,
-            }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A3040', textAlign: 'center', marginBottom: 8 }}>
               Reset Threshold
             </Text>
-            <Text style={{
-              fontSize: 13, color: '#6B7280', textAlign: 'center',
-              lineHeight: 20, marginBottom: 24,
-            }}>
-              Kembalikan semua threshold ke nilai default?{'\n'}
-              Tindakan ini tidak dapat dibatalkan.
+            <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+              Kembalikan semua threshold ke nilai default?{'\n'}Tindakan ini tidak dapat dibatalkan.
             </Text>
-
-            {/* Buttons */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
                 onPress={() => setShowResetConfirm(false)}
@@ -728,18 +871,171 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
               >
                 <Text style={{ color: '#6B7280', fontWeight: '600', fontSize: 14 }}>Batal</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 onPress={doResetThreshold}
                 activeOpacity={0.85}
-                style={{
-                  flex: 1, backgroundColor: '#F87171',
-                  borderRadius: 12, padding: 13, alignItems: 'center',
-                }}
+                style={{ flex: 1, backgroundColor: '#F87171', borderRadius: 12, padding: 13, alignItems: 'center' }}
               >
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Reset</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════
+          ── Device & Location Modal ──
+      ══════════════════════════════════════════════════ */}
+      <Modal
+        visible={showDeviceModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowDeviceModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' }}>
+
+            {/* Header */}
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+              padding: 16, borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TouchableOpacity
+                  onPress={() => { setShowDeviceModal(false); setShowSettingsMenu(true); }}
+                  style={{ marginRight: 2 }}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#3E8FB8" />
+                </TouchableOpacity>
+                <Ionicons name="hardware-chip-outline" size={18} color="#3E8FB8" />
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>Perangkat &amp; Lokasi</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowDeviceModal(false)}>
+                <Ionicons name="close" size={22} color="#8BAFC0" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+
+              {/* Status message */}
+              {deviceMsg && (
+                <View style={{
+                  backgroundColor: deviceMsg.type === 'ok' ? '#D1FAE5' : '#FEE2E2',
+                  borderRadius: 10, padding: 11, marginBottom: 14,
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                }}>
+                  <Ionicons
+                    name={deviceMsg.type === 'ok' ? 'checkmark-circle' : 'alert-circle'}
+                    size={16}
+                    color={deviceMsg.type === 'ok' ? '#065F46' : '#991B1B'}
+                  />
+                  <Text style={{ color: deviceMsg.type === 'ok' ? '#065F46' : '#991B1B', fontSize: 13, flex: 1 }}>
+                    {deviceMsg.text}
+                  </Text>
+                </View>
+              )}
+
+              {/* Info */}
+              <View style={{
+                backgroundColor: '#EFF8FF', borderRadius: 8, padding: 10, marginBottom: 16,
+                flexDirection: 'row', gap: 6,
+              }}>
+                <Ionicons name="information-circle-outline" size={14} color="#3E8FB8" style={{ marginTop: 1 }} />
+                <Text style={{ fontSize: 11, color: '#3E8FB8', flex: 1, lineHeight: 16 }}>
+                  Edit nama lokasi untuk setiap perangkat sensor yang terdaftar, lalu tekan Simpan.
+                </Text>
+              </View>
+
+              {/* Loading state */}
+              {deviceLoading ? (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#3E8FB8" />
+                  <Text style={{ color: '#8BAFC0', marginTop: 10, fontSize: 13 }}>Memuat perangkat...</Text>
+                </View>
+              ) : devices.length === 0 ? (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Ionicons name="hardware-chip-outline" size={44} color="#B0CFE0" />
+                  <Text style={{ color: '#8BAFC0', marginTop: 10, fontSize: 13 }}>Tidak ada perangkat terdaftar</Text>
+                </View>
+              ) : devices.map((device) => (
+                <View
+                  key={device.id}
+                  style={{
+                    backgroundColor: '#F8FBFF',
+                    borderRadius: 14, padding: 14, marginBottom: 12,
+                    borderWidth: 1.5, borderColor: '#D1E8F5',
+                  }}
+                >
+                  {/* Device info */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                    <View style={{
+                      width: 38, height: 38, borderRadius: 19,
+                      backgroundColor: '#3E8FB8',
+                      justifyContent: 'center', alignItems: 'center',
+                      marginRight: 10,
+                    }}>
+                      <Ionicons name="hardware-chip" size={18} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>
+  {device.device_code || `Device #${device.id}`}
+</Text>
+                    </View>
+                    <View style={{
+                      backgroundColor: device.status === 'active' ? '#D1FAE5' : '#FEE2E2',
+                      borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+                    }}>
+                      <Text style={{
+                        fontSize: 10, fontWeight: '700',
+                        color: device.status === 'active' ? '#065F46' : '#991B1B',
+                      }}>
+                        {device.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Location input + save */}
+                  <Text style={{ fontSize: 11, color: '#8BAFC0', marginBottom: 5, fontWeight: '600' }}>
+                    Lokasi Perangkat
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <TextInput
+                      value={editingLocation[device.id] ?? ''}
+                      onChangeText={(v) =>
+                        setEditingLocation((prev) => ({ ...prev, [device.id]: v }))
+                      }
+                      placeholder="Masukkan nama lokasi..."
+                      placeholderTextColor="#B0CFE0"
+                      style={{
+                        flex: 1,
+                        borderWidth: 1.5, borderColor: '#D1E8F5',
+                        borderRadius: 10, padding: 10,
+                        fontSize: 13, color: '#1A3040',
+                        backgroundColor: '#fff',
+                      }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => handleSaveDeviceLocation(device.id)}
+                      disabled={deviceSaving === device.id}
+                      activeOpacity={0.85}
+                      style={{
+                        backgroundColor: deviceSaving === device.id ? '#A8D4EA' : '#3E8FB8',
+                        borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+                        justifyContent: 'center', alignItems: 'center', minWidth: 68,
+                      }}
+                    >
+                      {deviceSaving === device.id ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Simpan</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              <View style={{ height: 32 }} />
+            </ScrollView>
           </View>
         </View>
       </Modal>
