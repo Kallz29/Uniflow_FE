@@ -17,6 +17,7 @@
       "bundleIdentifier": "com.uniflow.mobile"
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#7CB9D8"

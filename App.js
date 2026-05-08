@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SafeAreaView, StatusBar } from 'react-native';
+import * as Network from 'expo-network';
 import SplashScreen from './components/SplashScreen';
 import Dashboard from './components/Dashboard';
 import AboutUs from './components/AboutUs';
@@ -11,12 +12,24 @@ const ESP_STATUS_URL = 'http://192.168.4.1/api/wifi/status';
 
 // Cek apakah HP lagi konek ke ESP32 AP
 const checkESPReachable = async () => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
-    const res = await fetch(ESP_STATUS_URL, { signal: controller.signal });
+    const ipAddress = await Network.getIpAddressAsync();
+    if (ipAddress?.startsWith('192.168.4.')) {
+      return true;
+    }
+  } catch {
+    // Lanjut cek HTTP kalau IP lokal tidak bisa dibaca.
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(ESP_STATUS_URL, {
+      signal: controller.signal,
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     clearTimeout(timeout);
-    return res.ok;
+    return res.status >= 200 && res.status < 500;
   } catch {
     clearTimeout(timeout);
     return false;
