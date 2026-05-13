@@ -11,6 +11,7 @@ import {
   getChatMessages, sendChatMessage, updateChatSession,
   deleteChatSession,
 } from '../services/api';
+import { toUserMessage, logError } from '../utils/errorHandler';
 
 const stripMarkdown = (text) => {
   if (!text) return '';
@@ -73,7 +74,7 @@ export default function AIAssistant({ onBack }) {
       setChatHistory(mapSessions(sessions));
       return sessions;
     } catch (err) {
-      console.error('refreshHistory:', err.message);
+      logError('AIAssistant.refreshHistory', err);
       return [];
     }
   };
@@ -102,7 +103,8 @@ export default function AIAssistant({ onBack }) {
 
       setCurrentSessionId(sessionId);
     } catch (err) {
-      setSessionError(err.message);
+      logError('AIAssistant.initSession', err);
+      setSessionError(toUserMessage(err, 'Gagal memuat sesi chat'));
     } finally {
       setLoadingSession(false);
     }
@@ -145,7 +147,13 @@ export default function AIAssistant({ onBack }) {
     try {
       await loadMessagesForSession(sessionId);
     } catch (err) {
-      console.error(err.message);
+      logError('AIAssistant.loadSession', err);
+      setMessages([{
+        id: Date.now().toString(),
+        text: toUserMessage(err, 'Gagal memuat pesan'),
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
     }
   };
 
@@ -159,7 +167,13 @@ export default function AIAssistant({ onBack }) {
       setMessages([{ id: '1', text: GREETING_SHORT, sender: 'ai', timestamp: new Date() }]);
       await refreshHistory();
     } catch (err) {
-      console.error(err.message);
+      logError('AIAssistant.newSession', err);
+      setMessages((p) => [...p, {
+        id: Date.now().toString(),
+        text: toUserMessage(err, 'Gagal membuat sesi baru'),
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
     }
   };
 
@@ -193,9 +207,10 @@ export default function AIAssistant({ onBack }) {
 
       await refreshHistory();
     } catch (err) {
+      logError('AIAssistant.deleteSession', err);
       setMessages((p) => [...p, {
         id: Date.now().toString(),
-        text: 'Gagal menghapus sesi: ' + err.message,
+        text: 'Gagal menghapus sesi: ' + toUserMessage(err),
         sender: 'ai',
         timestamp: new Date(),
       }]);
@@ -229,9 +244,13 @@ export default function AIAssistant({ onBack }) {
         sessionId = res.data.id;
         setCurrentSessionId(sessionId);
         setIsFirstMessage(true);
-      } catch {
+      } catch (err) {
+        logError('AIAssistant.createSessionBeforeSend', err);
         setMessages((p) => [...p, {
-          id: Date.now().toString(), text: 'Gagal terhubung ke server.', sender: 'ai', timestamp: new Date(),
+          id: Date.now().toString(),
+          text: toUserMessage(err, 'Gagal terhubung ke server.'),
+          sender: 'ai',
+          timestamp: new Date(),
         }]);
         return;
       }
@@ -259,13 +278,14 @@ export default function AIAssistant({ onBack }) {
         try {
           await updateChatSession(sessionId, buildTitle(userText));
         } catch (err) {
-          console.error('[AIAssistant] updateChatSession failed:', err.message);
+          logError('AIAssistant.updateChatSession', err);
         }
       }
     } catch (err) {
+      logError('AIAssistant.sendMessage', err);
       setMessages((p) => [...p, {
         id: (Date.now() + 1).toString(),
-        text: 'Maaf, terjadi kesalahan: ' + err.message,
+        text: 'Maaf, terjadi kesalahan: ' + toUserMessage(err),
         sender: 'ai',
         timestamp: new Date(),
       }]);
