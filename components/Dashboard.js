@@ -14,6 +14,7 @@ import {
   updateThreshold, resetThreshold,
   getAllDevices, updateDevice,
 } from '../services/api';
+import { checkESPReachable } from '../services/espDevice';
 import { dashboardStyles as styles } from '../styles/dashboardStyles';
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -105,6 +106,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const GRID_PADDING = 16;
 const GRID_GAP     = 10;
 const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
+const DASHBOARD_REFRESH_INTERVAL = 4000;
 
 // ─── Parameter Card ────────────────────────────────────────
 const ParamCard = ({ item, onPress }) => (
@@ -137,7 +139,7 @@ const ParamCard = ({ item, onPress }) => (
 );
 
 // ─── Dashboard ─────────────────────────────────────────────
-export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
+export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigateToWifi }) {
   // ── Navigation & History ──
   const [selectedParameter,   setSelectedParameter]   = useState(null);
   const [showOverallHistory,  setShowOverallHistory]   = useState(false);
@@ -220,16 +222,21 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
 
       setLastUpdated(parseLocalDate(latest.created_at));
     } catch (err) {
+      const espReachable = await checkESPReachable({ retries: 1, delayMs: 600 });
+      if (espReachable) {
+        onNavigateToWifi?.();
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [onNavigateToWifi]);
 
   useEffect(() => {
     fetchData();
-    const iv = setInterval(fetchData, 30000);
+    const iv = setInterval(fetchData, DASHBOARD_REFRESH_INTERVAL);
     return () => clearInterval(iv);
   }, [fetchData]);
 
@@ -254,6 +261,11 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
 
   // ─── Settings Menu ───────────────────────────────────────
   const openSettingsMenu = () => setShowSettingsMenu(true);
+
+  const openWifiManager = () => {
+    setShowSettingsMenu(false);
+    onNavigateToWifi?.();
+  };
 
   // ─── Threshold handlers ──────────────────────────────────
   const openThreshold = () => {
@@ -624,6 +636,36 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI }) {
                   </Text>
                   <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>
                     Kelola nama lokasi setiap perangkat
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />
+              </TouchableOpacity>
+
+              {/* WiFi Manager */}
+              <TouchableOpacity
+                onPress={openWifiManager}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  backgroundColor: '#F0F9FF',
+                  borderRadius: 16, padding: 16,
+                  borderWidth: 1.5, borderColor: '#D1E8F5',
+                }}
+              >
+                <View style={{
+                  width: 46, height: 46, borderRadius: 23,
+                  backgroundColor: '#2E7CA8',
+                  justifyContent: 'center', alignItems: 'center',
+                  marginRight: 14,
+                }}>
+                  <Ionicons name="wifi-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A3040' }}>
+                    WiFi Manager ESP32
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>
+                    Hubungkan UniFlow ke jaringan WiFi
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />

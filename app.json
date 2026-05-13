@@ -2,7 +2,7 @@
   "expo": {
     "name": "UniFlow",
     "slug": "uniflow-mobile",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
@@ -18,24 +18,28 @@
     },
     "android": {
       "usesCleartextTraffic": true,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#7CB9D8"
       },
       "package": "com.uniflow.mobile",
       "permissions": [
-  "ACCESS_FINE_LOCATION",
-  "ACCESS_COARSE_LOCATION",
-  "ACCESS_WIFI_STATE",
-  "CHANGE_WIFI_STATE",
-  "INTERNET",
-  "ACCESS_NETWORK_STATE"
-]
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/logo.png"
     },
-    "plugins": ["expo-font"],
+    "plugins": [
+      "expo-font",
+      "./app.plugin"
+    ],
     "extra": {
       "eas": {
         "projectId": "736a14f6-f773-4e39-8b62-651c1860d74c"
