@@ -105,7 +105,8 @@ export const scanNetworks = async (onRetry) => {
 /** GET /api/wifi/status */
 export const getWifiStatus = () => espFetch('/status', {}, 6000);
 
-/** POST /api/wifi/connect */
+/** POST /api/wifi/connect — menunggu response penuh (legacy).
+ *  Untuk flow baru pakai `submitWifiConnect`. */
 export const connectWifi = (ssid, password) =>
   espFetch(
     '/connect',
@@ -116,6 +117,79 @@ export const connectWifi = (ssid, password) =>
     },
     15000,
   );
+
+/**
+ * POST /api/wifi/connect — fire-and-forget.
+ *
+ * Latar belakang: setelah ESP32 menerima kredensial WiFi, ia akan coba
+ * konek ke jaringan target. Proses ini bisa bikin ESP switch dari mode
+ * AP ke STA → koneksi HP ke AP "UniFlow-Setup" terputus → response HTTP
+ * tidak pernah sampai ke app → fetch timeout → user mikir gagal padahal
+ * sebenernya berhasil.
+ *
+ * Solusi: kirim request, lalu anggap permintaan diterima kalau:
+ *   - ESP merespons success eksplisit, ATAU
+ *   - Request abort / network error setelah `ackTimeoutMs` detik
+ *     (asumsinya ESP sudah switch network, artinya ESP menerima request).
+ *
+ * Caller (UI) tetap perlu verifikasi via backend health check setelah
+ * HP reconnect ke WiFi normal.
+ *
+ * @returns {Promise<{ accepted: true, response?: object, assumed?: boolean }>}
+ */
+export const submitWifiConnect = async (ssid, password, ackTimeoutMs = 4000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ackTimeoutMs);
+
+  try {
+    const res = await fetch(`${ESP_BASE}/connect`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Connection: 'close',
+      },
+      body: JSON.stringify({ ssid, password }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    const text = await res.text();
+    let data = {};
+    if (text) {
+      try { data = JSON.parse(text); }
+      catch { data = { message: text }; }
+    }
+
+    // ESP eksplisit bilang gagal (mis. password salah)
+    if (res.ok && data.success === false) {
+      throw new AppError(data.message || 'Gagal terhubung, periksa password.', {
+        code: 'ESP_CONNECT_REJECTED',
+      });
+    }
+
+    return { accepted: true, response: data };
+  } catch (err) {
+    clearTimeout(timer);
+
+    // Error eksplisit dari ESP (bukan network) → lempar
+    if (err instanceof AppError && err.code === 'ESP_CONNECT_REJECTED') {
+      throw err;
+    }
+
+    // Abort / network error → asumsikan ESP sudah menerima & switch network
+    if (isAbortError(err) || err?.name === 'TypeError') {
+      logError('espWifi.submitWifiConnect:assumed', err);
+      return { accepted: true, assumed: true };
+    }
+
+    // Error tak terduga
+    throw new AppError('Gagal mengirim permintaan koneksi ke ESP32.', {
+      code: 'ESP_CONNECT_ERROR',
+      cause: err,
+    });
+  }
+};
 
 /** POST /api/wifi/disconnect */
 export const disconnectWifi = () => espFetch('/disconnect', { method: 'POST' }, 6000);
