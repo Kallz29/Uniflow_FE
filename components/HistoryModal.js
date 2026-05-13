@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  Share, Linking, Platform,
+  Share, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { historyModalStyles as styles } from '../styles/historyModalStyles';
 import { getSensorCSVUrl } from '../services/api';
+import { logError } from '../utils/errorHandler';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -388,8 +389,6 @@ export default function HistoryModal({ visible, onClose, data }) {
     return `${s} – ${e}`;
   };
 
-  const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-
   const handleExport = async () => {
     const csvUrl = getSensorCSVUrl(90);
     try {
@@ -398,7 +397,9 @@ export default function HistoryModal({ visible, onClose, data }) {
       } else {
         await Share.share({ message: `Download CSV data sensor: ${csvUrl}`, title: `UniFlow - Riwayat ${title}` });
       }
-    } catch (err) { console.error('Export error:', err); }
+    } catch (err) {
+      logError('HistoryModal.export', err);
+    }
   };
 
   return (

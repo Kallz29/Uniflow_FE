@@ -15,6 +15,7 @@ import {
   getAllDevices, updateDevice,
 } from '../services/api';
 import { checkESPReachable } from '../services/espDevice';
+import { toUserMessage, logError } from '../utils/errorHandler';
 import { dashboardStyles as styles } from '../styles/dashboardStyles';
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -222,12 +223,14 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
       setLastUpdated(parseLocalDate(latest.created_at));
     } catch (err) {
+      logError('Dashboard.fetchData', err);
+      // Kalau backend tidak jawab tapi ESP32 di jangkauan, arahkan user ke WiFi setup.
       const espReachable = await checkESPReachable({ retries: 1, delayMs: 600 });
       if (espReachable) {
         onNavigateToWifi?.();
         return;
       }
-      setError(err.message);
+      setError(toUserMessage(err, 'Gagal memuat data sensor'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -248,7 +251,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       await markAlertRead(id);
       setAlerts((p) => p.map((a) => a.id === id ? { ...a, is_read: true } : a));
       setUnreadCount((p) => Math.max(0, p - 1));
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      logError('Dashboard.markRead', err);
+    }
   };
 
   const handleMarkAllRead = async () => {
@@ -256,7 +261,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       await markAllAlertsRead();
       setAlerts((p) => p.map((a) => ({ ...a, is_read: true })));
       setUnreadCount(0);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      logError('Dashboard.markAllRead', err);
+    }
   };
 
   // ─── Settings Menu ───────────────────────────────────────
@@ -300,7 +307,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       setThresholdMsg({ type: 'ok', text: 'Threshold berhasil diperbarui!' });
       fetchData();
     } catch (err) {
-      setThresholdMsg({ type: 'err', text: err.message });
+      logError('Dashboard.saveThreshold', err);
+      setThresholdMsg({ type: 'err', text: toUserMessage(err, 'Gagal menyimpan threshold') });
     } finally {
       setThresholdSaving(false);
     }
@@ -319,7 +327,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       setThresholdMsg({ type: 'ok', text: 'Threshold direset ke default.' });
       fetchData();
     } catch (err) {
-      setThresholdMsg({ type: 'err', text: err.message });
+      logError('Dashboard.resetThreshold', err);
+      setThresholdMsg({ type: 'err', text: toUserMessage(err, 'Gagal reset threshold') });
     }
   };
 
@@ -332,13 +341,13 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     try {
       const res  = await getAllDevices();
       const list = res.data || [];
-      console.log('list[0]:', JSON.stringify(list[0]));
       setDevices(list);
       const init = {};
       list.forEach((d) => { init[d.id] = d.location || ''; });
       setEditingLocation(init);
     } catch (err) {
-      setDeviceMsg({ type: 'err', text: err.message });
+      logError('Dashboard.loadDevices', err);
+      setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal memuat perangkat') });
     } finally {
       setDeviceLoading(false);
     }
@@ -359,7 +368,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       );
       setDeviceMsg({ type: 'ok', text: 'Lokasi perangkat berhasil diperbarui!' });
     } catch (err) {
-      setDeviceMsg({ type: 'err', text: err.message });
+      logError('Dashboard.saveDeviceLocation', err);
+      setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal menyimpan lokasi') });
     } finally {
       setDeviceSaving(null);
     }
