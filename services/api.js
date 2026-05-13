@@ -1,151 +1,255 @@
 // ============================================
 // API Service - UniFlow React Native
 // ============================================
-//
-// Catatan:
-// - Semua request sekarang lewat `apiClient` (utils/apiClient.js) yang
-//   sudah menangani timeout, parsing JSON/text, dan normalisasi error.
-// - Error yang di-throw dari fungsi-fungsi di file ini adalah `AppError`
-//   dengan pesan siap tampil (Bahasa Indonesia).
 
 import { BASE_URL } from '../config';
-import { apiClient } from '../utils/apiClient';
+
+const handleResponse = async (res) => {
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Terjadi kesalahan');
+  return json;
+};
 
 // ============================================
 // SENSOR
 // ============================================
 
 /** GET /api/sensors/latest */
-export const getLatestSensor = () =>
-  apiClient.get('/sensors/latest', { tag: 'getLatestSensor' });
+export const getLatestSensor = async () => {
+  const res = await fetch(`${BASE_URL}/sensors/latest`);
+  return handleResponse(res);
+};
 
 /** GET /api/sensors?limit=N */
-export const getAllSensors = (limit = 50) =>
-  apiClient.get(`/sensors?limit=${encodeURIComponent(limit)}`, { tag: 'getAllSensors' });
+export const getAllSensors = async (limit = 50) => {
+  const res = await fetch(`${BASE_URL}/sensors?limit=${limit}`);
+  return handleResponse(res);
+};
 
 /** GET /api/sensors/stats */
-export const getSensorStats = () =>
-  apiClient.get('/sensors/stats', { tag: 'getSensorStats' });
+export const getSensorStats = async () => {
+  const res = await fetch(`${BASE_URL}/sensors/stats`);
+  return handleResponse(res);
+};
 
-/** GET /api/sensors/export/csv?days=N — return URL string untuk di-share/open. */
+/** GET /api/sensors/export/csv?days=N → returns blob URL string */
 export const getSensorCSVUrl = (days = 90) =>
-  `${BASE_URL}/sensors/export/csv?days=${encodeURIComponent(days)}`;
+  `${BASE_URL}/sensors/export/csv?days=${days}`;
 
 // ============================================
 // ALERTS
 // ============================================
 
 /** GET /api/alerts?unread=true&limit=N */
-export const getAlerts = ({ unread = false, limit = 50 } = {}) => {
-  const params = new URLSearchParams({ limit: String(limit) });
+export const getAlerts = async ({ unread = false, limit = 50 } = {}) => {
+  const params = new URLSearchParams({ limit });
   if (unread) params.set('unread', 'true');
-  return apiClient.get(`/alerts?${params.toString()}`, { tag: 'getAlerts' });
+  const res = await fetch(`${BASE_URL}/alerts?${params}`);
+  return handleResponse(res);
 };
 
 /** PATCH /api/alerts/:id/read */
-export const markAlertRead = (id) =>
-  apiClient.patch(`/alerts/${encodeURIComponent(id)}/read`, null, { tag: 'markAlertRead' });
+export const markAlertRead = async (id) => {
+  const res = await fetch(`${BASE_URL}/alerts/${id}/read`, { method: 'PATCH' });
+  return handleResponse(res);
+};
 
 /** PATCH /api/alerts/read-all */
-export const markAllAlertsRead = () =>
-  apiClient.patch('/alerts/read-all', null, { tag: 'markAllAlertsRead' });
+export const markAllAlertsRead = async () => {
+  const res = await fetch(`${BASE_URL}/alerts/read-all`, { method: 'PATCH' });
+  return handleResponse(res);
+};
 
 // ============================================
 // THRESHOLD
 // ============================================
 
 /** GET /api/threshold */
-export const getThreshold = () =>
-  apiClient.get('/threshold', { tag: 'getThreshold' });
+export const getThreshold = async () => {
+  const res = await fetch(`${BASE_URL}/threshold`);
+  return handleResponse(res);
+};
 
 /** PUT /api/threshold */
-export const updateThreshold = (thresholdData) =>
-  apiClient.put('/threshold', thresholdData, { tag: 'updateThreshold' });
+export const updateThreshold = async (thresholdData) => {
+  const res = await fetch(`${BASE_URL}/threshold`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(thresholdData),
+  });
+  return handleResponse(res);
+};
 
 /** POST /api/threshold/reset */
-export const resetThreshold = () =>
-  apiClient.post('/threshold/reset', null, { tag: 'resetThreshold' });
+export const resetThreshold = async () => {
+  const res = await fetch(`${BASE_URL}/threshold/reset`, { method: 'POST' });
+  return handleResponse(res);
+};
 
 // ============================================
 // DEVICES
 // ============================================
 
 /** GET /api/devices */
-export const getAllDevices = () =>
-  apiClient.get('/devices', { tag: 'getAllDevices' });
+export const getAllDevices = async () => {
+  const res = await fetch(`${BASE_URL}/devices`);
+  return handleResponse(res);
+};
 
 /** GET /api/devices/:id */
-export const getDeviceById = (id) =>
-  apiClient.get(`/devices/${encodeURIComponent(id)}`, { tag: 'getDeviceById' });
+export const getDeviceById = async (id) => {
+  const res = await fetch(`${BASE_URL}/devices/${id}`);
+  return handleResponse(res);
+};
 
 /** POST /api/devices */
-export const createDevice = (deviceData) =>
-  apiClient.post('/devices', deviceData, { tag: 'createDevice' });
+export const createDevice = async (deviceData) => {
+  const res = await fetch(`${BASE_URL}/devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(deviceData),
+  });
+  return handleResponse(res);
+};
 
 /**
  * PUT /api/devices/:id
  * Body: { location: string }
  * Contoh: updateDevice(1, { location: 'Saluran Air Utama GKU' })
  */
-export const updateDevice = (id, { location }) =>
-  apiClient.put(`/devices/${encodeURIComponent(id)}`, { location }, {
-    tag: 'updateDevice',
-    fallbackErrorMsg: 'Gagal memperbarui perangkat',
+export const updateDevice = async (id, { location }) => {
+  const res = await fetch(`${BASE_URL}/devices/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ location }),
   });
+  return handleResponse(res);
+};
 
 /** DELETE /api/devices/:id */
-export const deleteDevice = (id) =>
-  apiClient.del(`/devices/${encodeURIComponent(id)}`, {
-    tag: 'deleteDevice',
-    fallbackErrorMsg: 'Gagal menghapus perangkat',
+export const deleteDevice = async (id) => {
+  const res = await fetch(`${BASE_URL}/devices/${id}`, {
+    method: 'DELETE',
   });
+
+  // 204 No Content — sukses tanpa body
+  if (res.status === 204) return { success: true };
+
+  // 200 dengan body JSON
+  if (res.ok) {
+    try {
+      const json = await res.json();
+      return { success: true, ...json };
+    } catch {
+      return { success: true };
+    }
+  }
+
+  // Error — coba parse body untuk pesan error
+  let errorMsg = `Gagal menghapus device (${res.status})`;
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || text;
+      } catch {
+        errorMsg = text;
+      }
+    }
+  } catch { /* ignore */ }
+
+  throw new Error(errorMsg);
+};
 
 // ============================================
 // CHAT
 // ============================================
 
 /** POST /api/chat/sessions */
-export const createChatSession = (title = 'Sesi Baru') =>
-  apiClient.post('/chat/sessions', { title }, { tag: 'createChatSession' });
+export const createChatSession = async (title = 'Sesi Baru') => {
+  const res = await fetch(`${BASE_URL}/chat/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  return handleResponse(res);
+};
 
 /** GET /api/chat/sessions */
-export const getAllChatSessions = () =>
-  apiClient.get('/chat/sessions', { tag: 'getAllChatSessions' });
+export const getAllChatSessions = async () => {
+  const res = await fetch(`${BASE_URL}/chat/sessions`);
+  return handleResponse(res);
+};
 
-/**
- * PATCH /api/chat/sessions/:id — update session title.
- * Backend ada yang support PATCH, ada yang hanya PUT — coba dua-duanya.
- */
+/** PATCH /api/chat/sessions/:id — update session title */
 export const updateChatSession = async (sessionId, title) => {
-  const path = `/chat/sessions/${encodeURIComponent(sessionId)}`;
-  try {
-    return await apiClient.patch(path, { title }, { tag: 'updateChatSession:PATCH' });
-  } catch (patchErr) {
-    // Kalau server tolak method, coba PUT sebagai fallback.
-    if (patchErr?.status === 405 || patchErr?.status === 404) {
-      return apiClient.put(path, { title }, { tag: 'updateChatSession:PUT' });
+  for (const method of ['PATCH', 'PUT']) {
+    try {
+      const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        return json;
+      }
+    } catch (err) {
+      console.warn('[updateChatSession]', method, 'error:', err.message);
     }
-    throw patchErr;
   }
+  throw new Error('updateChatSession: both PATCH and PUT failed');
 };
 
 /** GET /api/chat/sessions/:id/messages */
-export const getChatMessages = (sessionId) =>
-  apiClient.get(`/chat/sessions/${encodeURIComponent(sessionId)}/messages`, {
-    tag: 'getChatMessages',
-  });
+export const getChatMessages = async (sessionId) => {
+  const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}/messages`);
+  return handleResponse(res);
+};
 
-/** POST /api/chat/sessions/:id/messages — kirim pesan user, butuh waktu lebih lama (AI). */
-export const sendChatMessage = (sessionId, message) =>
-  apiClient.post(
-    `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
-    { message },
-    { tag: 'sendChatMessage', timeoutMs: 45000 }
-  );
+/** POST /api/chat/sessions/:id/messages */
+export const sendChatMessage = async (sessionId, message) => {
+  const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  return handleResponse(res);
+};
 
 /** DELETE /api/chat/sessions/:id */
-export const deleteChatSession = (sessionId) =>
-  apiClient.del(`/chat/sessions/${encodeURIComponent(sessionId)}`, {
-    tag: 'deleteChatSession',
-    fallbackErrorMsg: 'Gagal menghapus sesi',
+export const deleteChatSession = async (sessionId) => {
+  const res = await fetch(`${BASE_URL}/chat/sessions/${sessionId}`, {
+    method: 'DELETE',
   });
+
+  // 204 No Content — sukses tanpa body
+  if (res.status === 204) return { success: true };
+
+  // 200 dengan body JSON
+  if (res.ok) {
+    try {
+      const json = await res.json();
+      return { success: true, ...json };
+    } catch {
+      return { success: true };
+    }
+  }
+
+  // Error — coba parse body untuk pesan error
+  let errorMsg = `Gagal menghapus sesi (${res.status})`;
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || text;
+      } catch {
+        errorMsg = text;
+      }
+    }
+  } catch { /* ignore */ }
+
+  throw new Error(errorMsg);
+};
