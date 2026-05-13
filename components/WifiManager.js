@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import {
-  scanNetworks, getWifiStatus, connectWifi, disconnectWifi,
+  scanNetworks, getWifiStatus, submitWifiConnect, disconnectWifi,
 } from '../services/espWifi';
 import { getLocalIpAddress, isEspSetupIp } from '../services/espDevice';
 import { toUserMessage, logError } from '../utils/errorHandler';
@@ -114,12 +114,11 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
     setConnecting(true);
     setError(null);
     try {
-      const res = await connectWifi(targetSsid, password);
-      if (res.success) {
-        onSuccess(targetSsid);
-      } else {
-        setError(res.message || 'Gagal terhubung, cek password');
-      }
+      // Fire-and-forget: kalau ESP sudah menerima request (meski lalu switch
+      // network sebelum sempat kirim response), anggap berhasil. Verifikasi
+      // akhir dilakukan di Dashboard via backend health check.
+      await submitWifiConnect(targetSsid, password);
+      onSuccess(targetSsid);
     } catch (err) {
       logError('WifiManager.connect', err);
       setError(
@@ -278,6 +277,13 @@ export default function WiFiManager({ onConnected }) {
   const [localIp,       setLocalIp]       = useState(null);
   const [retryInfo,     setRetryInfo]     = useState(null);
 
+  // Countdown saat menunggu ESP switch dari AP mode ke STA.
+  // Flow: submit /connect → ESP terima → ESP pindah network → HP kehilangan
+  // WiFi "UniFlow-Setup" → user reconnect ke WiFi normal → kita redirect
+  // ke Dashboard yang akan verifikasi via backend.
+  const [connectingSsid,     setConnectingSsid]     = useState(null);
+  const [connectingCountdown, setConnectingCountdown] = useState(0);
+
   // Cek apakah komponen masih mounted saat async selesai —
   // penting untuk interval scan yang terus berjalan.
   const mountedRef = useRef(true);
@@ -392,11 +398,37 @@ export default function WiFiManager({ onConnected }) {
     setShowConnect(true);
   };
 
+  const CONNECTING_COUNTDOWN_SECS = 8;
+
   const handleSuccess = (ssid) => {
-    // ESP sudah konfirmasi success → ke dashboard setelah delay pendek.
+    // ESP sudah menerima request connect. Tampilkan overlay countdown
+    // supaya user punya waktu untuk reconnect HP ke WiFi normal.
     setShowConnect(false);
     setSuccessSSID(ssid);
-    setTimeout(() => onConnected?.(), 800);
+    setConnectingSsid(ssid);
+    setConnectingCountdown(CONNECTING_COUNTDOWN_SECS);
+  };
+
+  // Countdown tick: kurangi per detik, redirect saat mencapai 0.
+  useEffect(() => {
+    if (connectingSsid == null) return undefined;
+    if (connectingCountdown <= 0) {
+      const timer = setTimeout(() => {
+        if (!mountedRef.current) return;
+        setConnectingSsid(null);
+        onConnected?.();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => {
+      if (!mountedRef.current) return;
+      setConnectingCountdown((c) => c - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [connectingSsid, connectingCountdown, onConnected]);
+
+  const skipCountdown = () => {
+    setConnectingCountdown(0);
   };
 
   const handleDisconnect = async () => {
@@ -658,6 +690,86 @@ export default function WiFiManager({ onConnected }) {
         onClose={() => setShowConnect(false)}
         onSuccess={handleSuccess}
       />
+
+      {/* ── Connecting countdown overlay ── */}
+      <Modal
+        visible={connectingSsid != null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {}}
+      >
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(10,28,45,0.85)',
+          justifyContent: 'center', alignItems: 'center', padding: 32,
+        }}>
+          <View style={{
+            backgroundColor: '#fff', borderRadius: 20,
+            padding: 28, width: '100%', maxWidth: 360,
+          }}>
+            <View style={{ alignItems: 'center', marginBottom: 18 }}>
+              <View style={{
+                width: 64, height: 64, borderRadius: 32,
+                backgroundColor: '#EFF8FF',
+                justifyContent: 'center', alignItems: 'center',
+                marginBottom: 12,
+              }}>
+                <ActivityIndicator size="large" color="#5AA3C8" />
+              </View>
+              <Text style={{
+                fontSize: 17, fontWeight: '700',
+                color: '#1A3040', textAlign: 'center',
+              }}>
+                Menghubungkan ESP32...
+              </Text>
+              <Text style={{
+                fontSize: 13, color: '#5AA3C8',
+                fontWeight: '600', marginTop: 4,
+              }}>
+                {connectingSsid}
+              </Text>
+            </View>
+
+            <View style={{
+              backgroundColor: '#FFFBEB', borderRadius: 12, padding: 13,
+              borderWidth: 1, borderColor: '#FCD34D', marginBottom: 16,
+            }}>
+              <Text style={{
+                fontSize: 12, color: '#78350F',
+                lineHeight: 18, textAlign: 'center',
+              }}>
+                <Text style={{ fontWeight: '700' }}>Langkah selanjutnya:</Text>{'\n'}
+                Hubungkan HP kembali ke WiFi normal supaya aplikasi bisa
+                mengakses data sensor.
+              </Text>
+            </View>
+
+            <View style={{ alignItems: 'center', marginBottom: 14 }}>
+              <Text style={{ fontSize: 32, fontWeight: '800', color: '#5AA3C8' }}>
+                {connectingCountdown}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#8BAFC0', marginTop: 2 }}>
+                detik menuju dashboard
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={skipCountdown}
+              activeOpacity={0.85}
+              style={{
+                backgroundColor: '#5AA3C8',
+                borderRadius: 12, paddingVertical: 12,
+                alignItems: 'center', flexDirection: 'row',
+                justifyContent: 'center', gap: 8,
+              }}
+            >
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                Lanjut ke Dashboard Sekarang
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
