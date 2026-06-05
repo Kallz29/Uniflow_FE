@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Animated, Modal, Platform,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+<<<<<<< HEAD
 import {
   scanNetworks, getWifiStatus, connectWifi, disconnectWifi,
 } from '../services/espWifi';
@@ -17,6 +18,90 @@ import { toUserMessage, logError } from '../utils/errorHandler';
 const SCAN_INTERVAL_MS = 15000;
 
 // ─── Helpers tampilan sinyal ────────────────────────────────
+=======
+// ─── Konfigurasi ────────────────────────────────────────────
+const ESP_IP        = '192.168.4.1';
+const ESP_BASE      = `http://${ESP_IP}/api/wifi`;
+const SCAN_INTERVAL = 15000;
+
+// Seberapa lama polling setelah kirim connect request ke ESP32
+// ESP32 butuh ~8-12 detik untuk proses WPA handshake + DHCP
+const CONNECT_POLL_INTERVAL = 2000;   // cek status tiap 2 detik
+const CONNECT_POLL_TIMEOUT  = 20000;  // total tunggu max 20 detik
+
+// ─── API helpers ────────────────────────────────────────────
+const espFetch = async (path, options = {}, timeoutMs = 12000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${ESP_BASE}${path}`, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        // Paksa fresh connection — ESP32 WebServer tidak support persistent connection
+        'Connection': 'close',
+        ...(options.headers || {}),
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const text = await res.text();
+    let data = {};
+    if (text) {
+      try { data = JSON.parse(text); }
+      catch { data = { message: text }; }
+    }
+
+    if (!res.ok) throw new Error(data.message || `ESP response ${res.status}`);
+    return data;
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
+};
+
+const getLocalIpAddress = async () => {
+  try { return await Network.getIpAddressAsync(); }
+  catch { return null; }
+};
+
+const isOnEspSetupNetwork = (ip) => ip?.startsWith('192.168.4.');
+
+const scanNetworks = async (retryCount = 0) => {
+  const MAX_RETRY   = 8;
+  const RETRY_DELAY = 2500;
+
+  let result;
+  try {
+    result = await espFetch('/scan', {}, 12000);
+  } catch (err) {
+    if (retryCount < MAX_RETRY) {
+      await new Promise(r => setTimeout(r, RETRY_DELAY));
+      return scanNetworks(retryCount + 1);
+    }
+    throw err;
+  }
+
+  if (result.scanning === true) {
+    if (retryCount >= MAX_RETRY) return { networks: [] };
+    await new Promise(r => setTimeout(r, RETRY_DELAY));
+    return scanNetworks(retryCount + 1);
+  }
+
+  return result;
+};
+
+const getWifiStatus  = ()           => espFetch('/status',     {},                          6000);
+const connectWifi    = (ssid, pass) => espFetch('/connect',    {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ssid, password: pass }),
+}, 15000);
+const disconnectWifi = ()           => espFetch('/disconnect', { method: 'POST' },          6000);
+
+// ─── Signal strength ─────────────────────────────────────────
+>>>>>>> 5f36da6 (wifi new)
 const getSignalInfo = (rssi) => {
   if (rssi >= -50) return { icon: 'wifi',         color: '#22C55E', label: 'Kuat' };
   if (rssi >= -65) return { icon: 'wifi',         color: '#84CC16', label: 'Baik' };
@@ -86,58 +171,173 @@ const NetworkItem = ({ network, onPress, isConnected }) => {
   );
 };
 
+<<<<<<< HEAD
 // ─── ConnectModal ───────────────────────────────────────────
+=======
+// ─── ConnectModal ─────────────────────────────────────────────
+/**
+ * FIX UTAMA: Setelah user tekan Hubungkan dan ESP32 merespons success,
+ * modal langsung masuk fase "menunggu ESP32 pindah WiFi".
+ *
+ * Cara kerjanya:
+ * 1. Kirim POST /connect ke ESP32  → ESP32 mulai proses koneksi di background
+ * 2. Poll GET /status tiap 2 detik → tunggu field connected: true
+ * 3. Kalau sudah connected → panggil onSuccess() → parent redirect ke Dashboard
+ * 4. Kalau timeout 20 detik → tunjukkan error tapi tetap kasih tombol ke Dashboard
+ *
+ * Kenapa HP disconnect dari UniFlow-Setup?
+ * ESP32 mode WIFI_AP_STA: saat STA berhasil connect ke WiFi baru, Android/iOS
+ * kadang mendeteksi AP masih ada tapi koneksi ke 192.168.4.1 putus karena
+ * interface STA sekarang aktif dan Android memilih route terbaik. Solusinya:
+ * begitu onSuccess() dipanggil, app langsung pindah ke Dashboard sehingga
+ * tidak ada lagi request ke ESP32 yang bisa gagal.
+ */
+>>>>>>> 5f36da6 (wifi new)
 const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
-  const [ssid,       setSsid]       = useState('');
-  const [password,   setPassword]   = useState('');
-  const [showPass,   setShowPass]   = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [error,      setError]      = useState(null);
+  const [ssid,         setSsid]         = useState('');
+  const [password,     setPassword]     = useState('');
+  const [showPass,     setShowPass]     = useState(false);
+  const [phase,        setPhase]        = useState('input');  // 'input' | 'waiting' | 'done' | 'error'
+  const [statusMsg,    setStatusMsg]    = useState('');
+  const [error,        setError]        = useState(null);
+  const [countdown,    setCountdown]    = useState(0);
   const slideAnim = useRef(new Animated.Value(300)).current;
+  const pollRef   = useRef(null);
+  const startedAt = useRef(0);
 
   useEffect(() => {
     if (visible) {
       setSsid(network?.ssid || '');
       setPassword('');
       setError(null);
+      setPhase('input');
+      setStatusMsg('');
+      setCountdown(0);
       Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 12, useNativeDriver: true }).start();
     } else {
       slideAnim.setValue(300);
+      clearInterval(pollRef.current);
     }
+<<<<<<< HEAD
   }, [visible, network]);
+=======
+    return () => clearInterval(pollRef.current);
+  }, [visible]);
+>>>>>>> 5f36da6 (wifi new)
+
+  // Poll status ESP32 setelah kirim connect request
+  const startPolling = useCallback((targetSsid) => {
+    startedAt.current = Date.now();
+    setPhase('waiting');
+    setStatusMsg(`Menunggu ESP32 terhubung ke "${targetSsid}"...`);
+    setCountdown(Math.ceil(CONNECT_POLL_TIMEOUT / 1000));
+
+    // Countdown visual
+    const countdownRef = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(countdownRef); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Poll status
+    pollRef.current = setInterval(async () => {
+      const elapsed = Date.now() - startedAt.current;
+
+      // Timeout — ESP32 tidak berhasil connect dalam waktu yang ditentukan
+      if (elapsed >= CONNECT_POLL_TIMEOUT) {
+        clearInterval(pollRef.current);
+        clearInterval(countdownRef);
+        setPhase('error');
+        setError(
+          `ESP32 belum terhubung ke "${targetSsid}" setelah ${CONNECT_POLL_TIMEOUT / 1000} detik.\n\n` +
+          `Kemungkinan:\n` +
+          `• Password salah\n` +
+          `• WiFi "${targetSsid}" tidak terjangkau\n\n` +
+          `Kamu bisa langsung ke Dashboard dan coba lagi nanti.`
+        );
+        return;
+      }
+
+      try {
+        const status = await getWifiStatus();
+        if (status?.connected && status?.ssid === targetSsid) {
+          clearInterval(pollRef.current);
+          clearInterval(countdownRef);
+          setPhase('done');
+          setStatusMsg(`Berhasil! ESP32 terhubung ke "${targetSsid}"`);
+          // Delay singkat agar user sempat lihat pesan success, lalu redirect
+          setTimeout(() => onSuccess(targetSsid), 800);
+        } else if (status?.connected && status?.ssid !== targetSsid) {
+          // Sudah connected tapi ke SSID berbeda — mungkin fallback ke saved WiFi
+          clearInterval(pollRef.current);
+          clearInterval(countdownRef);
+          setPhase('done');
+          setStatusMsg(`ESP32 terhubung ke "${status.ssid}"`);
+          setTimeout(() => onSuccess(status.ssid), 800);
+        }
+        // Kalau belum connected, tunggu interval berikutnya
+      } catch {
+        // Request gagal karena HP mulai disconnect dari UniFlow-Setup
+        // — ini normal! Artinya ESP32 sudah mulai pindah WiFi.
+        // Kita update pesan tapi lanjut polling sampai timeout.
+        const secondsLeft = Math.ceil((CONNECT_POLL_TIMEOUT - elapsed) / 1000);
+        if (secondsLeft > 0) {
+          setStatusMsg(
+            `ESP32 sedang berpindah jaringan...\n` +
+            `HP mungkin disconnect dari UniFlow-Setup sebentar.`
+          );
+        }
+      }
+    }, CONNECT_POLL_INTERVAL);
+  }, [onSuccess]);
 
   const handleConnect = async () => {
     const targetSsid = ssid.trim();
     if (!targetSsid) { setError('Masukkan nama WiFi terlebih dahulu'); return; }
     if (network?.secured && !password.trim()) { setError('Masukkan password terlebih dahulu'); return; }
 
-    setConnecting(true);
+    setPhase('waiting');
+    setStatusMsg('Mengirim permintaan ke ESP32...');
     setError(null);
+
     try {
       const res = await connectWifi(targetSsid, password);
       if (res.success) {
-        onSuccess(targetSsid);
+        // ESP32 konfirmasi menerima request — sekarang poll sampai benar-benar connect
+        startPolling(targetSsid);
       } else {
+        setPhase('error');
         setError(res.message || 'Gagal terhubung, cek password');
       }
     } catch (err) {
+<<<<<<< HEAD
       logError('WifiManager.connect', err);
       setError(
         toUserMessage(err, 'Tidak dapat menjangkau ESP32.') +
         '\n\nPastikan:\n' +
+=======
+      setPhase('error');
+      setError(
+        'Tidak dapat menjangkau ESP32.\n\n' +
+        'Pastikan:\n' +
+>>>>>>> 5f36da6 (wifi new)
         '• HP terhubung ke WiFi "UniFlow-Setup"\n' +
         '• Data seluler/VPN dimatikan\n' +
         '• Pilih "Tetap terhubung" jika ada peringatan'
       );
-    } finally {
-      setConnecting(false);
     }
+  };
+
+  const handleClose = () => {
+    clearInterval(pollRef.current);
+    onClose();
   };
 
   if (!network) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -157,106 +357,206 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
               backgroundColor: '#D1E8F5', alignSelf: 'center', marginBottom: 20,
             }} />
 
+            {/* Header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <View style={{
                 width: 44, height: 44, borderRadius: 13,
-                backgroundColor: '#EFF8FF', justifyContent: 'center', alignItems: 'center',
+                backgroundColor: phase === 'done' ? '#F0FDF4' : '#EFF8FF',
+                justifyContent: 'center', alignItems: 'center',
               }}>
-                <Ionicons name="wifi" size={22} color="#5AA3C8" />
+                {phase === 'done'
+                  ? <Ionicons name="checkmark-circle" size={24} color="#22C55E" />
+                  : phase === 'waiting'
+                  ? <ActivityIndicator size="small" color="#5AA3C8" />
+                  : <Ionicons name="wifi" size={22} color="#5AA3C8" />
+                }
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A3040' }}>
-                  {network.manual ? 'Input WiFi Manual' : network.ssid}
+                  {phase === 'done'    ? 'Terhubung!'
+                  : phase === 'waiting' ? 'Menghubungkan...'
+                  : phase === 'error'   ? 'Gagal Terhubung'
+                  : network.manual      ? 'Input WiFi Manual'
+                  :                       network.ssid}
                 </Text>
                 <Text style={{ fontSize: 11, color: '#8BAFC0', marginTop: 1 }}>
-                  {network.secured ? 'Jaringan terenkripsi' : 'Jaringan terbuka'}
+                  {phase === 'waiting' || phase === 'done'
+                    ? statusMsg
+                    : network.secured ? 'Jaringan terenkripsi' : 'Jaringan terbuka'
+                  }
                 </Text>
               </View>
-              <TouchableOpacity onPress={onClose}>
-                <Ionicons name="close-circle" size={24} color="#C5DDE8" />
-              </TouchableOpacity>
+              {/* Tombol close hanya saat input atau error */}
+              {(phase === 'input' || phase === 'error') && (
+                <TouchableOpacity onPress={handleClose}>
+                  <Ionicons name="close-circle" size={24} color="#C5DDE8" />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {network.manual && (
-              <View style={{ marginBottom: 14 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#4A8BAA', marginBottom: 8 }}>
-                  Nama WiFi / SSID
-                </Text>
-                <TextInput
+            {/* Fase: input form */}
+            {phase === 'input' && (
+              <>
+                {network.manual && (
+                  <View style={{ marginBottom: 14 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#4A8BAA', marginBottom: 8 }}>
+                      Nama WiFi / SSID
+                    </Text>
+                    <TextInput
+                      style={{
+                        borderWidth: 1.5, borderColor: error && !ssid.trim() ? '#FCA5A5' : '#D1E8F5',
+                        borderRadius: 12, backgroundColor: '#F0F9FF',
+                        paddingHorizontal: 14, paddingVertical: 12,
+                        fontSize: 14, color: '#1A3040',
+                      }}
+                      value={ssid}
+                      onChangeText={(t) => { setSsid(t); setError(null); }}
+                      placeholder="Contoh: WiFi Rumah"
+                      placeholderTextColor="#B0CFE0"
+                      autoFocus
+                    />
+                  </View>
+                )}
+
+                {network.secured && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#4A8BAA', marginBottom: 8 }}>
+                      Password WiFi
+                    </Text>
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      borderWidth: 1.5, borderColor: error ? '#FCA5A5' : '#D1E8F5',
+                      borderRadius: 12, backgroundColor: '#F0F9FF', paddingHorizontal: 14,
+                    }}>
+                      <TextInput
+                        style={{ flex: 1, paddingVertical: 12, fontSize: 14, color: '#1A3040' }}
+                        value={password}
+                        onChangeText={(t) => { setPassword(t); setError(null); }}
+                        secureTextEntry={!showPass}
+                        placeholder="Masukkan password"
+                        placeholderTextColor="#B0CFE0"
+                        autoFocus={!network.manual}
+                      />
+                      <TouchableOpacity onPress={() => setShowPass((p) => !p)}>
+                        <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#8BAFC0" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {error && (
+                  <View style={{
+                    backgroundColor: '#FEE2E2', borderRadius: 10, padding: 11, marginBottom: 14,
+                    flexDirection: 'row', alignItems: 'flex-start', gap: 7,
+                  }}>
+                    <Ionicons name="alert-circle" size={15} color="#EF4444" style={{ marginTop: 1 }} />
+                    <Text style={{ fontSize: 12, color: '#DC2626', flex: 1 }}>{error}</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  onPress={handleConnect}
+                  activeOpacity={0.85}
                   style={{
-                    borderWidth: 1.5, borderColor: error && !ssid.trim() ? '#FCA5A5' : '#D1E8F5',
-                    borderRadius: 12, backgroundColor: '#F0F9FF',
-                    paddingHorizontal: 14, paddingVertical: 12,
-                    fontSize: 14, color: '#1A3040',
+                    backgroundColor: '#5AA3C8',
+                    borderRadius: 14, paddingVertical: 14,
+                    alignItems: 'center', flexDirection: 'row',
+                    justifyContent: 'center', gap: 8,
                   }}
-                  value={ssid}
-                  onChangeText={(t) => { setSsid(t); setError(null); }}
-                  placeholder="Contoh: WiFi Rumah"
-                  placeholderTextColor="#B0CFE0"
-                  autoFocus
-                />
-              </View>
+                >
+                  <Ionicons name="wifi" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Hubungkan</Text>
+                </TouchableOpacity>
+              </>
             )}
 
-            {network.secured && (
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#4A8BAA', marginBottom: 8 }}>
-                  Password WiFi
+            {/* Fase: menunggu ESP32 connect ke WiFi baru */}
+            {phase === 'waiting' && (
+              <View style={{ alignItems: 'center', paddingVertical: 20, gap: 12 }}>
+                <ActivityIndicator size="large" color="#5AA3C8" />
+                <Text style={{ fontSize: 13, color: '#4A8BAA', textAlign: 'center', lineHeight: 20 }}>
+                  {statusMsg}
                 </Text>
+                {countdown > 0 && (
+                  <View style={{
+                    backgroundColor: '#EFF8FF', borderRadius: 20,
+                    paddingHorizontal: 14, paddingVertical: 6,
+                  }}>
+                    <Text style={{ fontSize: 12, color: '#7CB9D8' }}>
+                      Timeout dalam {countdown} detik
+                    </Text>
+                  </View>
+                )}
                 <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  borderWidth: 1.5, borderColor: error ? '#FCA5A5' : '#D1E8F5',
-                  borderRadius: 12, backgroundColor: '#F0F9FF', paddingHorizontal: 14,
+                  backgroundColor: '#FFFBEB', borderRadius: 10, padding: 12, marginTop: 4,
+                  borderWidth: 1, borderColor: '#FDE68A',
                 }}>
-                  <TextInput
-                    style={{ flex: 1, paddingVertical: 12, fontSize: 14, color: '#1A3040' }}
-                    value={password}
-                    onChangeText={(t) => { setPassword(t); setError(null); }}
-                    secureTextEntry={!showPass}
-                    placeholder="Masukkan password"
-                    placeholderTextColor="#B0CFE0"
-                    autoFocus={!network.manual}
-                  />
-                  <TouchableOpacity onPress={() => setShowPass((p) => !p)}>
-                    <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#8BAFC0" />
-                  </TouchableOpacity>
+                  <Text style={{ fontSize: 11, color: '#92400E', textAlign: 'center', lineHeight: 17 }}>
+                    HP mungkin sementara disconnect dari UniFlow-Setup.{'\n'}
+                    Ini normal — tunggu hingga selesai.
+                  </Text>
                 </View>
               </View>
             )}
 
-            {error && (
-              <View style={{
-                backgroundColor: '#FEE2E2', borderRadius: 10, padding: 11, marginBottom: 14,
-                flexDirection: 'row', alignItems: 'flex-start', gap: 7,
-              }}>
-                <Ionicons name="alert-circle" size={15} color="#EF4444" style={{ marginTop: 1 }} />
-                <Text style={{ fontSize: 12, color: '#DC2626', flex: 1 }}>{error}</Text>
+            {/* Fase: sukses */}
+            {phase === 'done' && (
+              <View style={{ alignItems: 'center', paddingVertical: 16, gap: 12 }}>
+                <View style={{
+                  width: 64, height: 64, borderRadius: 32,
+                  backgroundColor: '#F0FDF4', justifyContent: 'center', alignItems: 'center',
+                }}>
+                  <Ionicons name="checkmark-circle" size={40} color="#22C55E" />
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D', textAlign: 'center' }}>
+                  {statusMsg}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#8BAFC0', textAlign: 'center' }}>
+                  Mengalihkan ke Dashboard...
+                </Text>
+                <ActivityIndicator size="small" color="#22C55E" />
               </View>
             )}
 
-            <TouchableOpacity
-              onPress={handleConnect}
-              disabled={connecting}
-              activeOpacity={0.85}
-              style={{
-                backgroundColor: connecting ? '#A8D4EA' : '#5AA3C8',
-                borderRadius: 14, paddingVertical: 14,
-                alignItems: 'center', flexDirection: 'row',
-                justifyContent: 'center', gap: 8,
-              }}
-            >
-              {connecting ? (
-                <>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Menghubungkan...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="wifi" size={16} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Hubungkan</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Fase: error */}
+            {phase === 'error' && (
+              <>
+                <View style={{
+                  backgroundColor: '#FEE2E2', borderRadius: 10, padding: 11, marginBottom: 16,
+                  flexDirection: 'row', alignItems: 'flex-start', gap: 7,
+                }}>
+                  <Ionicons name="alert-circle" size={15} color="#EF4444" style={{ marginTop: 1 }} />
+                  <Text style={{ fontSize: 12, color: '#DC2626', flex: 1, lineHeight: 18 }}>{error}</Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => setPhase('input')}
+                  activeOpacity={0.85}
+                  style={{
+                    backgroundColor: '#5AA3C8',
+                    borderRadius: 14, paddingVertical: 12,
+                    alignItems: 'center', marginBottom: 10,
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Coba Lagi</Text>
+                </TouchableOpacity>
+
+                {/* Tombol ke Dashboard tetap tersedia walau gagal */}
+                <TouchableOpacity
+                  onPress={() => { clearInterval(pollRef.current); onSuccess(null); }}
+                  activeOpacity={0.85}
+                  style={{
+                    borderWidth: 1.5, borderColor: '#7CB9D8',
+                    borderRadius: 14, paddingVertical: 12,
+                    alignItems: 'center', flexDirection: 'row',
+                    justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <Text style={{ color: '#5AA3C8', fontWeight: '700', fontSize: 14 }}>Ke Dashboard</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#5AA3C8" />
+                </TouchableOpacity>
+              </>
+            )}
           </Animated.View>
         </View>
       </KeyboardAvoidingView>
@@ -272,20 +572,63 @@ export default function WiFiManager({ onConnected }) {
   const [wifiStatus,    setWifiStatus]    = useState(null);
   const [selectedNet,   setSelectedNet]   = useState(null);
   const [showConnect,   setShowConnect]   = useState(false);
-  const [successSSID,   setSuccessSSID]   = useState(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [scanHint,      setScanHint]      = useState(null);
   const [localIp,       setLocalIp]       = useState(null);
   const [retryInfo,     setRetryInfo]     = useState(null);
+<<<<<<< HEAD
 
   // Cek apakah komponen masih mounted saat async selesai —
   // penting untuk interval scan yang terus berjalan.
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
+=======
+>>>>>>> 5f36da6 (wifi new)
 
   const headerOpac = useRef(new Animated.Value(0)).current;
   const headerY    = useRef(new Animated.Value(-20)).current;
   const spinAnim   = useRef(new Animated.Value(0)).current;
+
+  // ── Fix: jaga agar HP tidak drop dari UniFlow-Setup ──────────
+  //
+  // Android agresif mendrop koneksi AP yang "tidak punya internet".
+  // Kita counter dengan:
+  //  1. Ping ringan ke ESP32 tiap 3 detik saat WiFiManager aktif
+  //     → menjaga ARP table + cegah Android idle-drop interface
+  //  2. AppState listener: kalau app kembali ke foreground, langsung
+  //     re-check status (user mungkin sempat buka Settings WiFi)
+  const keepAliveRef  = useRef(null);
+  const appStateRef   = useRef(AppState.currentState);
+
+  const pingESP = useCallback(async () => {
+    try {
+      // Ping ringan — hanya butuh response apa saja
+      await fetch(`http://${ESP_IP}/api/wifi/status?_=${Date.now()}`, {
+        headers: { Connection: 'close', Accept: 'application/json' },
+        signal: AbortSignal.timeout(1500),
+      });
+    } catch {
+      // Abaikan error — tujuan hanya keep-alive, bukan baca data
+    }
+  }, []);
+
+  useEffect(() => {
+    // Mulai keep-alive ping tiap 3 detik
+    keepAliveRef.current = setInterval(pingESP, 3000);
+
+    // AppState: re-scan saat app kembali ke foreground
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        doScan();
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      clearInterval(keepAliveRef.current);
+      sub.remove();
+    };
+  }, [pingESP]);
 
   useEffect(() => {
     Animated.parallel([
@@ -321,11 +664,80 @@ export default function WiFiManager({ onConnected }) {
     // Ambil status dulu (ringan) supaya tahu ESP hidup atau tidak.
     let statusResult = null;
     try {
+<<<<<<< HEAD
       setScanHint('Menghubungi ESP32...');
       statusResult = await getWifiStatus();
     } catch (err) {
       // Diam — status gagal tidak fatal, lanjut scan.
       logError('WifiManager.status', err);
+=======
+      const ipAddress = await getLocalIpAddress();
+      setLocalIp(ipAddress);
+      const connectedToEspAp = isOnEspSetupNetwork(ipAddress);
+
+      let scanResult   = { networks: [] };
+      let statusResult = null;
+
+      try {
+        setScanHint('Menghubungi ESP32...');
+        statusResult = await getWifiStatus();
+        setScanHint(null);
+      } catch (e) {
+        setScanHint(null);
+      }
+
+      try {
+        setScanHint('ESP32 memindai jaringan WiFi...');
+        const patchedScan = async (attempt = 0) => {
+          if (attempt > 0) setRetryInfo(`Percobaan ${attempt}/8...`);
+          try {
+            const res = await espFetch('/scan', {}, 12000);
+            if (res.scanning === true) {
+              if (attempt >= 8) return { networks: [] };
+              await new Promise(r => setTimeout(r, 2500));
+              return patchedScan(attempt + 1);
+            }
+            return res;
+          } catch {
+            if (attempt >= 8) return { networks: [] };
+            await new Promise(r => setTimeout(r, 2500));
+            return patchedScan(attempt + 1);
+          }
+        };
+        scanResult = await patchedScan();
+        setScanHint(null);
+        setRetryInfo(null);
+      } catch (e) {
+        setScanHint(null);
+        setRetryInfo(null);
+      }
+
+      const hasNetworks = (scanResult.networks || []).length > 0;
+      const hasStatus   = !!statusResult;
+
+      if (!hasNetworks && !hasStatus) {
+        if (connectedToEspAp) {
+          setScanError(
+            `HP sudah di jaringan ESP (${ipAddress}), tetapi ESP32 belum merespons.\n\n` +
+            `Kemungkinan penyebab:\n` +
+            `• ESP32 masih proses koneksi ke WiFi kampus (~10 detik)\n` +
+            `• Data seluler/VPN aktif → Android memblokir HTTP ke 192.168.4.1\n` +
+            `• Pilih "Tetap terhubung" jika ada peringatan "WiFi tanpa internet"\n\n` +
+            `Tunggu 10 detik lalu tekan Coba Lagi.`
+          );
+        } else {
+          setScanError(
+            'Tidak dapat terhubung ke ESP32.\n' +
+            'Pastikan HP terhubung ke WiFi "UniFlow-Setup".'
+          );
+        }
+        return;
+      }
+
+      setNetworks(scanResult.networks || []);
+      if (statusResult) setWifiStatus(statusResult);
+
+>>>>>>> 5f36da6 (wifi new)
     } finally {
       if (mountedRef.current) setScanHint(null);
     }
@@ -375,7 +787,10 @@ export default function WiFiManager({ onConnected }) {
     setScanning(false);
   }, []);
 
+<<<<<<< HEAD
   // Auto-scan: sekali saat mount + polling berkala.
+=======
+>>>>>>> 5f36da6 (wifi new)
   useEffect(() => {
     doScan();
     const iv = setInterval(doScan, SCAN_INTERVAL_MS);
@@ -392,19 +807,27 @@ export default function WiFiManager({ onConnected }) {
     setShowConnect(true);
   };
 
+<<<<<<< HEAD
   const handleSuccess = (ssid) => {
     // ESP sudah konfirmasi success → ke dashboard setelah delay pendek.
+=======
+  /**
+   * FIX: handleSuccess sekarang dipanggil dari ConnectModal setelah
+   * polling membuktikan ESP32 sudah connected (atau timeout / user paksa).
+   * Redirect ke Dashboard langsung — tidak ada state tambahan yang perlu diset.
+   */
+  const handleSuccess = useCallback((ssid) => {
+    clearInterval(keepAliveRef.current);  // hentikan keep-alive, sudah tidak di WiFiManager
+>>>>>>> 5f36da6 (wifi new)
     setShowConnect(false);
-    setSuccessSSID(ssid);
-    setTimeout(() => onConnected?.(), 800);
-  };
+    onConnected?.();
+  }, [onConnected]);
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
       await disconnectWifi();
       setWifiStatus(null);
-      setSuccessSSID(null);
       doScan();
     } catch (err) {
       logError('WifiManager.disconnect', err);
@@ -613,42 +1036,14 @@ export default function WiFiManager({ onConnected }) {
             </TouchableOpacity>
           </View>
         ) : (
-          <>
-            {successSSID && !wifiStatus?.connected && (
-              <View style={{
-                backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12,
-                flexDirection: 'row', alignItems: 'center', gap: 9,
-                borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 12,
-              }}>
-                <ActivityIndicator size="small" color="#22C55E" />
-                <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '600', flex: 1 }}>
-                  Menghubungkan ke {successSSID}...
-                </Text>
-              </View>
-            )}
-
-            {wifiStatus?.connected && (
-              <View style={{
-                backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12,
-                flexDirection: 'row', alignItems: 'center', gap: 9,
-                borderWidth: 1, borderColor: '#BBF7D0', marginBottom: 12,
-              }}>
-                <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
-                <Text style={{ fontSize: 13, color: '#15803D', fontWeight: '600', flex: 1 }}>
-                  Berhasil terhubung ke {wifiStatus.ssid}
-                </Text>
-              </View>
-            )}
-
-            {sortedNetworks.map((network, idx) => (
-              <NetworkItem
-                key={`${network.ssid}-${idx}`}
-                network={network}
-                onPress={handleSelectNetwork}
-                isConnected={wifiStatus?.connected && wifiStatus.ssid === network.ssid}
-              />
-            ))}
-          </>
+          sortedNetworks.map((network, idx) => (
+            <NetworkItem
+              key={`${network.ssid}-${idx}`}
+              network={network}
+              onPress={handleSelectNetwork}
+              isConnected={wifiStatus?.connected && wifiStatus.ssid === network.ssid}
+            />
+          ))
         )}
       </ScrollView>
 
