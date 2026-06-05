@@ -4,21 +4,10 @@ import {
   ActivityIndicator, Animated, Modal, Platform,
   KeyboardAvoidingView, AppState,
 } from 'react-native';
+import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
-<<<<<<< HEAD
-import {
-  scanNetworks, getWifiStatus, connectWifi, disconnectWifi,
-} from '../services/espWifi';
-import { getLocalIpAddress, isEspSetupIp } from '../services/espDevice';
-import { toUserMessage, logError } from '../utils/errorHandler';
-
-// ─── Konstanta ──────────────────────────────────────────────
-const SCAN_INTERVAL_MS = 15000;
-
-// ─── Helpers tampilan sinyal ────────────────────────────────
-=======
 // ─── Konfigurasi ────────────────────────────────────────────
 const ESP_IP        = '192.168.4.1';
 const ESP_BASE      = `http://${ESP_IP}/api/wifi`;
@@ -101,7 +90,6 @@ const connectWifi    = (ssid, pass) => espFetch('/connect',    {
 const disconnectWifi = ()           => espFetch('/disconnect', { method: 'POST' },          6000);
 
 // ─── Signal strength ─────────────────────────────────────────
->>>>>>> 5f36da6 (wifi new)
 const getSignalInfo = (rssi) => {
   if (rssi >= -50) return { icon: 'wifi',         color: '#22C55E', label: 'Kuat' };
   if (rssi >= -65) return { icon: 'wifi',         color: '#84CC16', label: 'Baik' };
@@ -109,9 +97,9 @@ const getSignalInfo = (rssi) => {
   return             { icon: 'wifi-outline',       color: '#EF4444', label: 'Sangat Lemah' };
 };
 
-// ─── NetworkItem ────────────────────────────────────────────
+// ─── NetworkItem ──────────────────────────────────────────────
 const NetworkItem = ({ network, onPress, isConnected }) => {
-  const sig = getSignalInfo(network.rssi);
+  const sig   = getSignalInfo(network.rssi);
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePress = () => {
@@ -171,9 +159,6 @@ const NetworkItem = ({ network, onPress, isConnected }) => {
   );
 };
 
-<<<<<<< HEAD
-// ─── ConnectModal ───────────────────────────────────────────
-=======
 // ─── ConnectModal ─────────────────────────────────────────────
 /**
  * FIX UTAMA: Setelah user tekan Hubungkan dan ESP32 merespons success,
@@ -192,7 +177,6 @@ const NetworkItem = ({ network, onPress, isConnected }) => {
  * begitu onSuccess() dipanggil, app langsung pindah ke Dashboard sehingga
  * tidak ada lagi request ke ESP32 yang bisa gagal.
  */
->>>>>>> 5f36da6 (wifi new)
 const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
   const [ssid,         setSsid]         = useState('');
   const [password,     setPassword]     = useState('');
@@ -218,12 +202,8 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
       slideAnim.setValue(300);
       clearInterval(pollRef.current);
     }
-<<<<<<< HEAD
-  }, [visible, network]);
-=======
     return () => clearInterval(pollRef.current);
   }, [visible]);
->>>>>>> 5f36da6 (wifi new)
 
   // Poll status ESP32 setelah kirim connect request
   const startPolling = useCallback((targetSsid) => {
@@ -311,20 +291,13 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
         setError(res.message || 'Gagal terhubung, cek password');
       }
     } catch (err) {
-<<<<<<< HEAD
-      logError('WifiManager.connect', err);
-      setError(
-        toUserMessage(err, 'Tidak dapat menjangkau ESP32.') +
-        '\n\nPastikan:\n' +
-=======
       setPhase('error');
       setError(
         'Tidak dapat menjangkau ESP32.\n\n' +
         'Pastikan:\n' +
->>>>>>> 5f36da6 (wifi new)
         '• HP terhubung ke WiFi "UniFlow-Setup"\n' +
         '• Data seluler/VPN dimatikan\n' +
-        '• Pilih "Tetap terhubung" jika ada peringatan'
+        '• Pilih "Tetap terhubung" jika Android memberi peringatan'
       );
     }
   };
@@ -564,7 +537,7 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
   );
 };
 
-// ─── Main: WiFiManager ──────────────────────────────────────
+// ─── Main: WiFiManager ───────────────────────────────────────
 export default function WiFiManager({ onConnected }) {
   const [networks,      setNetworks]      = useState([]);
   const [scanning,      setScanning]      = useState(true);
@@ -576,14 +549,6 @@ export default function WiFiManager({ onConnected }) {
   const [scanHint,      setScanHint]      = useState(null);
   const [localIp,       setLocalIp]       = useState(null);
   const [retryInfo,     setRetryInfo]     = useState(null);
-<<<<<<< HEAD
-
-  // Cek apakah komponen masih mounted saat async selesai —
-  // penting untuk interval scan yang terus berjalan.
-  const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
-=======
->>>>>>> 5f36da6 (wifi new)
 
   const headerOpac = useRef(new Animated.Value(0)).current;
   const headerY    = useRef(new Animated.Value(-20)).current;
@@ -635,7 +600,7 @@ export default function WiFiManager({ onConnected }) {
       Animated.timing(headerOpac, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(headerY,    { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
-  }, [headerOpac, headerY]);
+  }, []);
 
   useEffect(() => {
     if (scanning) {
@@ -645,32 +610,17 @@ export default function WiFiManager({ onConnected }) {
     } else {
       spinAnim.setValue(0);
     }
-  }, [scanning, spinAnim]);
+  }, [scanning]);
 
   const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   const doScan = useCallback(async () => {
-    if (!mountedRef.current) return;
     setScanning(true);
     setScanError(null);
     setScanHint(null);
     setRetryInfo(null);
 
-    const ipAddress = await getLocalIpAddress();
-    if (!mountedRef.current) return;
-    setLocalIp(ipAddress);
-    const connectedToEspAp = isEspSetupIp(ipAddress);
-
-    // Ambil status dulu (ringan) supaya tahu ESP hidup atau tidak.
-    let statusResult = null;
     try {
-<<<<<<< HEAD
-      setScanHint('Menghubungi ESP32...');
-      statusResult = await getWifiStatus();
-    } catch (err) {
-      // Diam — status gagal tidak fatal, lanjut scan.
-      logError('WifiManager.status', err);
-=======
       const ipAddress = await getLocalIpAddress();
       setLocalIp(ipAddress);
       const connectedToEspAp = isOnEspSetupNetwork(ipAddress);
@@ -737,63 +687,14 @@ export default function WiFiManager({ onConnected }) {
       setNetworks(scanResult.networks || []);
       if (statusResult) setWifiStatus(statusResult);
 
->>>>>>> 5f36da6 (wifi new)
     } finally {
-      if (mountedRef.current) setScanHint(null);
-    }
-
-    // Scan jaringan dengan progress retry.
-    let scanResult = { networks: [] };
-    let scanErrorObj = null;
-    try {
-      setScanHint('ESP32 memindai jaringan WiFi...');
-      scanResult = await scanNetworks((attempt, max) => {
-        if (mountedRef.current) setRetryInfo(`Percobaan ${attempt}/${max}...`);
-      });
-    } catch (err) {
-      scanErrorObj = err;
-      logError('WifiManager.scan', err);
-    } finally {
-      if (mountedRef.current) { setScanHint(null); setRetryInfo(null); }
-    }
-
-    if (!mountedRef.current) return;
-
-    const hasNetworks = (scanResult.networks || []).length > 0;
-    const hasStatus   = !!statusResult;
-
-    if (!hasNetworks && !hasStatus) {
-      if (connectedToEspAp) {
-        setScanError(
-          `HP sudah di jaringan ESP (${ipAddress}), tetapi ESP32 belum merespons.\n\n` +
-          `Kemungkinan penyebab:\n` +
-          `• ESP32 masih proses koneksi ke WiFi kampus (~10 detik)\n` +
-          `• Data seluler/VPN aktif — Android memblokir HTTP ke 192.168.4.1\n` +
-          `• Pilih "Tetap terhubung" jika ada peringatan "WiFi tanpa internet"\n\n` +
-          `Tunggu 10 detik lalu tekan Coba Lagi.`
-        );
-      } else {
-        setScanError(
-          (scanErrorObj ? toUserMessage(scanErrorObj) + '\n\n' : '') +
-          'Pastikan HP terhubung ke WiFi "UniFlow-Setup".'
-        );
-      }
       setScanning(false);
-      return;
     }
-
-    setNetworks(scanResult.networks || []);
-    if (statusResult) setWifiStatus(statusResult);
-    setScanning(false);
   }, []);
 
-<<<<<<< HEAD
-  // Auto-scan: sekali saat mount + polling berkala.
-=======
->>>>>>> 5f36da6 (wifi new)
   useEffect(() => {
     doScan();
-    const iv = setInterval(doScan, SCAN_INTERVAL_MS);
+    const iv = setInterval(doScan, SCAN_INTERVAL);
     return () => clearInterval(iv);
   }, [doScan]);
 
@@ -807,10 +708,6 @@ export default function WiFiManager({ onConnected }) {
     setShowConnect(true);
   };
 
-<<<<<<< HEAD
-  const handleSuccess = (ssid) => {
-    // ESP sudah konfirmasi success → ke dashboard setelah delay pendek.
-=======
   /**
    * FIX: handleSuccess sekarang dipanggil dari ConnectModal setelah
    * polling membuktikan ESP32 sudah connected (atau timeout / user paksa).
@@ -818,7 +715,6 @@ export default function WiFiManager({ onConnected }) {
    */
   const handleSuccess = useCallback((ssid) => {
     clearInterval(keepAliveRef.current);  // hentikan keep-alive, sudah tidak di WiFiManager
->>>>>>> 5f36da6 (wifi new)
     setShowConnect(false);
     onConnected?.();
   }, [onConnected]);
@@ -830,8 +726,7 @@ export default function WiFiManager({ onConnected }) {
       setWifiStatus(null);
       doScan();
     } catch (err) {
-      logError('WifiManager.disconnect', err);
-      setScanError(toUserMessage(err, 'Gagal memutuskan koneksi'));
+      console.error(err);
     } finally {
       setDisconnecting(false);
     }
@@ -1056,3 +951,4 @@ export default function WiFiManager({ onConnected }) {
     </View>
   );
 }
+  
