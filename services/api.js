@@ -149,3 +149,13 @@ export const deleteChatSession = (sessionId) =>
     tag: 'deleteChatSession',
     fallbackErrorMsg: 'Gagal menghapus sesi',
   });
+
+  // GET /api/sensors/export/csv?days=N&zone=Z&start=S&end=E
+export const exportSensorCSV = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.zone)  query.set('zone', params.zone);
+  if (params.start) query.set('start', params.start);
+  if (params.end)   query.set('end', params.end);
+  if (params.days)  query.set('days', params.days);
+  return `${BASE_URL}/sensors/export/csv?${query.toString()}`;
+};

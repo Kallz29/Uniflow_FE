@@ -10,6 +10,7 @@ import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import { exportSensorCSV } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -500,105 +501,88 @@ export default function HistoryModal({ visible, onClose, data }) {
   };
 
   // ─── Build CSV string ───────────────────────────────────
-  const buildCSV = (rows) => {
-    // Cek apakah ada kolom location yang terisi
-    const hasLocation = rows.some((r) => r.location);
-    const header = hasLocation
-      ? 'No,Timestamp,Zona,Value,Unit,Status\n'
-      : 'No,Timestamp,Value,Unit,Status\n';
+  // ─── Export params ──────────────────────────────────────
+const buildExportParams = () => {
+  const params = {};
 
-    const body = rows
-      .map((entry, i) => {
-        const d = entry.timestamp instanceof Date
-          ? entry.timestamp
-          : new Date(String(entry.timestamp).replace('Z', ''));
-
-        const pad = (n) => String(n).padStart(2, '0');
-        const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-
-        // Escape nilai yang mungkin mengandung koma
-        const escapeCsv = (val) => {
-          const s = String(val ?? '');
-          return s.includes(',') ? `"${s}"` : s;
-        };
-
-        const statusMap = { good: 'Normal', warning: 'Peringatan', danger: 'Bahaya' };
-        const statusLabel = statusMap[entry.status] || entry.status || 'Normal';
-
-        if (hasLocation) {
-          return `${i + 1},${ts},${escapeCsv(entry.location ?? '')},${entry.value},${entry.unit},${statusLabel}`;
-        }
-        return `${i + 1},${ts},${entry.value},${entry.unit},${statusLabel}`;
-      })
-      .join('\n');
-
-    return header + body;
-  };
-
-  // ─── Export CSV ─────────────────────────────────────────
-  const handleExport = async () => {
-    try {
-      if (filteredHistory.length === 0) {
-        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor dengan filter saat ini.');
-        return;
-      }
-
-      const csvContent = buildCSV(filteredHistory);
-      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = now.getFullYear();
-      const dateStr = `${day}-${month}-${year}`;
-      const zoneStr = (activeFilter.zone || quickZone || 'semua').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      const fileName = `${safeName}_${dateStr}_${zoneStr}.csv`;
-      const fileUri = FileSystem.cacheDirectory + fileName;
-
-      // Tulis file
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      // Cek ketersediaan sharing
-      const isAvailable = await Sharing.isAvailableAsync();
-
-      if (isAvailable) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
-          dialogTitle: `Export Riwayat ${title}`,
-          UTI: 'public.comma-separated-values-text',
-        });
-      } else {
-        // Fallback: share sebagai teks (untuk emulator / platform yang tidak support file sharing)
-        await Share.share({
-          message: csvContent,
-          title: `UniFlow - Riwayat ${title}`,
-        });
-      }
-    } catch (err) {
-      logError('HistoryModal.export', err);
-      Alert.alert(
-        'Export Gagal',
-        'Tidak dapat mengekspor data. Pastikan izin penyimpanan telah diberikan.',
-      );
-    }
-  };
-const handleExportWeb = () => {
-  if (filteredHistory.length === 0) {
-    Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
-    return;
+  if (activeFilter.zone || quickZone) {
+    params.zone = activeFilter.zone || quickZone;
   }
-  const csvContent = buildCSV(filteredHistory);
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
+
+  if (activeFilter.startDate) {
+    const { startDate, endDate } = activeFilter;
+
+    params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')}`;
+
+    if (endDate) {
+      params.end = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
+    }
+  }
+
+  return params;
+};
+
+// ─── Export CSV ─────────────────────────────────────────
+const handleExport = async () => {
+  try {
+    const url = exportSensorCSV(buildExportParams());
+
+    const parameterName = title
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .toLowerCase();
+
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+
+    const zoneStr = (activeFilter.zone || quickZone || 'semua')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toLowerCase();
+
+    const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
+
+    const isAvailable = await Sharing.isAvailableAsync();
+
+    if (isAvailable) {
+      await Sharing.shareAsync(url, {
+        mimeType: 'text/csv',
+        dialogTitle: `Export ${parameterName}`,
+        UTI: 'public.comma-separated-values-text',
+      });
+    } else {
+      await Share.share({
+        message: url,
+        title: fileName,
+      });
+    }
+  } catch (err) {
+    logError('HistoryModal.export', err);
+    Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
+  }
+};
+
+const handleExportWeb = () => {
+  const url = exportSensorCSV(buildExportParams());
+
+  const parameterName = title
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .toLowerCase();
+
+  const now = new Date();
+  const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+
+  const zoneStr = (activeFilter.zone || quickZone || 'semua')
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .toLowerCase();
+
+  const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
+
   const link = document.createElement('a');
-  const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_');
   link.href = url;
-  link.setAttribute('download', `uniflow_${safeName}_${Date.now()}.csv`);
+  link.setAttribute('download', fileName);
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 };
   // Reset quick zone ketika filter modal berubah
   const handleApplyFilter = (filter) => {
