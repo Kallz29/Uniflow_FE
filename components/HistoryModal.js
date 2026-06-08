@@ -544,9 +544,15 @@ export default function HistoryModal({ visible, onClose, data }) {
       }
 
       const csvContent = buildCSV(filteredHistory);
-      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_');
-      const fileName = `uniflow_${safeName}_${Date.now()}.csv`;
-      const fileUri = FileSystem.documentDirectory + fileName;
+      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dateStr = `${day}-${month}-${year}`;
+      const zoneStr = (activeFilter.zone || quickZone || 'semua').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      const fileName = `${safeName}_${dateStr}_${zoneStr}.csv`;
+      const fileUri = FileSystem.cacheDirectory + fileName;
 
       // Tulis file
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
