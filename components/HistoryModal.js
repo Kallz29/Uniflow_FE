@@ -9,6 +9,7 @@ import { historyModalStyles as styles } from '../styles/historyModalStyles';
 import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -576,7 +577,23 @@ export default function HistoryModal({ visible, onClose, data }) {
       );
     }
   };
-
+const handleExportWeb = () => {
+  if (filteredHistory.length === 0) {
+    Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
+    return;
+  }
+  const csvContent = buildCSV(filteredHistory);
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_');
+  link.href = url;
+  link.setAttribute('download', `uniflow_${safeName}_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
   // Reset quick zone ketika filter modal berubah
   const handleApplyFilter = (filter) => {
     setActiveFilter(filter);
@@ -628,7 +645,9 @@ export default function HistoryModal({ visible, onClose, data }) {
                 />
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handleExport} style={styles.headerBtn}>
+              <TouchableOpacity 
+  onPress={Platform.OS === 'web' ? handleExportWeb : handleExport} 
+  style={styles.headerBtn}>
                 <Ionicons name="download-outline" size={18} color="#fff" />
               </TouchableOpacity>
 
@@ -792,3 +811,4 @@ export default function HistoryModal({ visible, onClose, data }) {
     </Modal>
   );
 }
+
