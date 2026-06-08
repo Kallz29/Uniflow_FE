@@ -1,12 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  Share, Linking,
+  Share, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { historyModalStyles as styles } from '../styles/historyModalStyles';
-import { getSensorCSVUrl } from '../services/api';
 import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -39,12 +38,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const hasDataOnDate = (year, month, day) =>
     dataDateSet.has(`${year}-${month}-${day}`);
 
-  const [viewYear,    setViewYear]    = useState(now.getFullYear());
-  const [viewMonth,   setViewMonth]   = useState(now.getMonth());
-  const [startDate,   setStartDate]   = useState(null);
-  const [endDate,     setEndDate]     = useState(null);
-  const [selecting,   setSelecting]   = useState('start');
-  const [activeZone,  setActiveZone]  = useState(null); // null = semua zona
+  const [viewYear,   setViewYear]   = useState(now.getFullYear());
+  const [viewMonth,  setViewMonth]  = useState(now.getMonth());
+  const [startDate,  setStartDate]  = useState(null);
+  const [endDate,    setEndDate]    = useState(null);
+  const [selecting,  setSelecting]  = useState('start');
+  const [activeZone, setActiveZone] = useState(null);
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -111,6 +110,15 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
     return `${d.day} ${MONTHS_SHORT[d.month]} ${d.year}`;
   };
 
+  // Hitung berapa data per zona (untuk badge)
+  const zoneCountMap = useMemo(() => {
+    const map = {};
+    history.forEach((h) => {
+      if (h.location) map[h.location] = (map[h.location] || 0) + 1;
+    });
+    return map;
+  }, [history]);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
@@ -136,55 +144,90 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
           </View>
 
           {/* ── ZONA SECTION ── */}
-          {zones && zones.length > 0 && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 8 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040' }}>
                 Zona / Lokasi
               </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {/* Pill "Semua" */}
+              {zones && zones.length === 0 && (
+                <Text style={{ fontSize: 11, color: '#B0CFE0', fontStyle: 'italic' }}>
+                  Belum ada data zona
+                </Text>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {/* Pill "Semua" */}
+                <TouchableOpacity
+                  onPress={() => setActiveZone(null)}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 7,
+                    borderRadius: 20, borderWidth: 1.5,
+                    borderColor: activeZone === null ? '#7CB9D8' : '#D1E8F5',
+                    backgroundColor: activeZone === null ? '#7CB9D8' : '#F9FAFB',
+                    flexDirection: 'row', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <Ionicons
+                    name="layers-outline"
+                    size={12}
+                    color={activeZone === null ? '#fff' : '#8BAFC0'}
+                  />
+                  <Text style={{
+                    fontSize: 12, fontWeight: '700',
+                    color: activeZone === null ? '#fff' : '#8BAFC0',
+                  }}>
+                    Semua
+                  </Text>
+                  <View style={{
+                    backgroundColor: activeZone === null ? 'rgba(255,255,255,0.35)' : '#EAF4FB',
+                    borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 18, alignItems: 'center',
+                  }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: activeZone === null ? '#fff' : '#5AA3C8' }}>
+                      {history.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Pill per zona */}
+                {(zones || []).map((z) => (
                   <TouchableOpacity
-                    onPress={() => setActiveZone(null)}
+                    key={z}
+                    onPress={() => setActiveZone(activeZone === z ? null : z)}
                     style={{
                       paddingHorizontal: 14, paddingVertical: 7,
                       borderRadius: 20, borderWidth: 1.5,
-                      borderColor: activeZone === null ? '#7CB9D8' : '#D1E8F5',
-                      backgroundColor: activeZone === null ? '#7CB9D8' : '#F9FAFB',
+                      borderColor: activeZone === z ? '#5AA3C8' : '#D1E8F5',
+                      backgroundColor: activeZone === z ? '#EFF8FF' : '#F9FAFB',
+                      flexDirection: 'row', alignItems: 'center', gap: 5,
                     }}
                   >
+                    <Ionicons
+                      name="location-outline"
+                      size={12}
+                      color={activeZone === z ? '#2A7DA0' : '#8BAFC0'}
+                    />
                     <Text style={{
                       fontSize: 12, fontWeight: '700',
-                      color: activeZone === null ? '#fff' : '#8BAFC0',
+                      color: activeZone === z ? '#2A7DA0' : '#8BAFC0',
                     }}>
-                      Semua
+                      {z}
                     </Text>
-                  </TouchableOpacity>
-
-                  {/* Pill per zona */}
-                  {zones.map((z) => (
-                    <TouchableOpacity
-                      key={z}
-                      onPress={() => setActiveZone(activeZone === z ? null : z)}
-                      style={{
-                        paddingHorizontal: 14, paddingVertical: 7,
-                        borderRadius: 20, borderWidth: 1.5,
-                        borderColor: activeZone === z ? '#5AA3C8' : '#D1E8F5',
-                        backgroundColor: activeZone === z ? '#EFF8FF' : '#F9FAFB',
-                      }}
-                    >
-                      <Text style={{
-                        fontSize: 12, fontWeight: '700',
-                        color: activeZone === z ? '#2A7DA0' : '#8BAFC0',
+                    {zoneCountMap[z] != null && (
+                      <View style={{
+                        backgroundColor: activeZone === z ? '#D1E8F5' : '#EAF4FB',
+                        borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 18, alignItems: 'center',
                       }}>
-                        {z}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
-          )}
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#5AA3C8' }}>
+                          {zoneCountMap[z]}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
 
           {/* Divider */}
           <View style={{ height: 1, backgroundColor: '#EAF4FB', marginTop: 12, marginHorizontal: 16 }} />
@@ -267,13 +310,13 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
             {Array.from({ length: totalCells / 7 }).map((_, weekIdx) => (
               <View key={weekIdx} style={{ flexDirection: 'row', marginBottom: 4 }}>
                 {Array.from({ length: 7 }).map((_, dayIdx) => {
-                  const cellNum  = weekIdx * 7 + dayIdx;
-                  const day      = cellNum - firstDay + 1;
-                  const isValid  = day >= 1 && day <= daysInMonth;
-                  const hasData  = isValid && hasDataOnDate(viewYear, viewMonth, day);
-                  const inRange  = isValid && isInRange(day);
-                  const isS      = isValid && isStart(day);
-                  const isE      = isValid && isEnd(day);
+                  const cellNum = weekIdx * 7 + dayIdx;
+                  const day     = cellNum - firstDay + 1;
+                  const isValid = day >= 1 && day <= daysInMonth;
+                  const hasData = isValid && hasDataOnDate(viewYear, viewMonth, day);
+                  const inRange = isValid && isInRange(day);
+                  const isS     = isValid && isStart(day);
+                  const isE     = isValid && isEnd(day);
                   const isMarked = isS || isE;
                   return (
                     <TouchableOpacity
@@ -284,7 +327,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
                         flex: 1, height: 38, alignItems: 'center', justifyContent: 'center',
                         backgroundColor: isMarked ? '#7CB9D8' : inRange ? '#EAF4FB' : 'transparent',
                         borderRadius: isMarked ? 10 : inRange ? 0 : 10,
-                        borderTopLeftRadius:  isS ? 10 : inRange ? 0 : 10,
+                        borderTopLeftRadius: isS ? 10 : inRange ? 0 : 10,
                         borderBottomLeftRadius: isS ? 10 : inRange ? 0 : 10,
                         borderTopRightRadius: isE ? 10 : inRange ? 0 : 10,
                         borderBottomRightRadius: isE ? 10 : inRange ? 0 : 10,
@@ -347,6 +390,9 @@ export default function HistoryModal({ visible, onClose, data }) {
   const [showFilter,   setShowFilter]   = useState(false);
   const [activeFilter, setActiveFilter] = useState({ startDate: null, endDate: null, zone: null });
 
+  // ── Quick zone filter langsung dari header list (tanpa buka modal) ──
+  const [quickZone, setQuickZone] = useState(null);
+
   const statusConfig = {
     good:    { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
     warning: { bg: '#FEF3C7', color: '#92400E', label: 'Peringatan' },
@@ -371,38 +417,52 @@ export default function HistoryModal({ visible, onClose, data }) {
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
 
- const filteredHistory = useMemo(() => {
-  const { startDate, endDate, zone } = activeFilter;
-  let result = history;
+  // Semua zona unik dari history
+  const zones = useMemo(() => {
+    const set = new Set(history.map((h) => h.location).filter(Boolean));
+    return Array.from(set).sort();
+  }, [history]);
 
-  // Filter tanggal
-  if (startDate) {
-    const start = new Date(startDate.year, startDate.month, startDate.day, 0, 0, 0);
-    const end = endDate
-      ? new Date(endDate.year, endDate.month, endDate.day, 23, 59, 59)
-      : new Date(startDate.year, startDate.month, startDate.day, 23, 59, 59);
+  // Apakah ada data multi-zona
+  const isMultiZone = zones.length > 1;
 
-    result = result.filter((entry) => {
-      const d = entry.timestamp instanceof Date
-        ? entry.timestamp
-        : new Date(String(entry.timestamp).replace('Z', ''));
+  // Filter utama dari CalendarFilterModal
+  const filteredByModal = useMemo(() => {
+    const { startDate, endDate, zone } = activeFilter;
+    let result = history;
 
-      return d >= start && d <= end;
-    });
-  }
+    if (startDate) {
+      const start = new Date(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+      const end = endDate
+        ? new Date(endDate.year, endDate.month, endDate.day, 23, 59, 59)
+        : new Date(startDate.year, startDate.month, startDate.day, 23, 59, 59);
 
-  // Filter zona
-  if (zone) {
-    result = result.filter((entry) => entry.location === zone);
-  }
+      result = result.filter((entry) => {
+        const d = entry.timestamp instanceof Date
+          ? entry.timestamp
+          : new Date(String(entry.timestamp).replace('Z', ''));
+        return d >= start && d <= end;
+      });
+    }
 
-  return result;
-}, [history, activeFilter]);
+    if (zone) {
+      result = result.filter((entry) => entry.location === zone);
+    }
 
-const zones = useMemo(() => {
-  const set = new Set(history.map((h) => h.location).filter(Boolean));
-  return Array.from(set).sort();
-}, [history]);
+    return result;
+  }, [history, activeFilter]);
+
+  // Filter tambahan: quick zone pill di bawah header list
+  const filteredHistory = useMemo(() => {
+    if (!quickZone) return filteredByModal;
+    return filteredByModal.filter((entry) => entry.location === quickZone);
+  }, [filteredByModal, quickZone]);
+
+  // Zona yang tersedia setelah filter modal (untuk quick zone pills)
+  const zonesAfterModal = useMemo(() => {
+    const set = new Set(filteredByModal.map((h) => h.location).filter(Boolean));
+    return Array.from(set).sort();
+  }, [filteredByModal]);
 
   const getTrend = (index) => {
     if (index === filteredHistory.length - 1) return 'stable';
@@ -419,71 +479,118 @@ const zones = useMemo(() => {
     stable: { icon: 'remove',        color: '#8BAFC0', label: 'Stabil' },
   };
 
- const isFiltered = !!activeFilter.startDate || !!activeFilter.zone;
+  const isFiltered = !!activeFilter.startDate || !!activeFilter.zone;
 
-const filterLabel = () => {
-  const { startDate, endDate, zone } = activeFilter;
-  const parts = [];
+  const filterLabel = () => {
+    const { startDate, endDate, zone } = activeFilter;
+    const parts = [];
 
-  if (startDate) {
-    const s = `${startDate.day} ${MONTHS_SHORT[startDate.month]} ${startDate.year}`;
-    const e = endDate
-      ? ` – ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
-      : '';
-
-    parts.push(s + e);
-  }
-
-  if (zone) parts.push(zone);
-
-  return parts.join(' · ') || null;
-};
-
-  // ─── Helper: build CSV string dari filteredHistory ─────────
-const buildCSV = (rows) => {
-  const header = 'No,Timestamp,Value,Unit,Status\n';
-  const body = rows
-    .map((entry, i) => {
-      // Format timestamp ke ISO lokal (tanpa Z agar mudah dibaca di Excel)
-      const d = entry.timestamp instanceof Date
-        ? entry.timestamp
-        : new Date(String(entry.timestamp).replace('Z', ''));
-      const ts = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-      return `${i+1},${ts},${entry.value},${entry.unit},${entry.status}`;
-    })
-    .join('\n');
-  return header + body;
-};
-
-const handleExport = async () => {
-  try {
-    if (filteredHistory.length === 0) return;
-
-    const csvContent = buildCSV(filteredHistory);
-    const fileName = `uniflow_${title.replace(/\s+/g, '_')}_${Date.now()}.csv`;
-    const fileUri = FileSystem.documentDirectory + fileName;
-
-    await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
-
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (isAvailable) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'text/csv',
-        dialogTitle: `Export Riwayat ${title}`,
-        UTI: 'public.comma-separated-values-text',
-      });
-    } else {
-      await Share.share({
-        message: csvContent,
-        title: `UniFlow - Riwayat ${title}`,
-      });
+    if (startDate) {
+      const s = `${startDate.day} ${MONTHS_SHORT[startDate.month]} ${startDate.year}`;
+      const e = endDate
+        ? ` – ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
+        : '';
+      parts.push(s + e);
     }
-  } catch (err) {
-    logError('HistoryModal.export', err);
-  }
-};
+
+    if (zone) parts.push(zone);
+
+    return parts.join(' · ') || null;
+  };
+
+  // ─── Build CSV string ───────────────────────────────────
+  const buildCSV = (rows) => {
+    // Cek apakah ada kolom location yang terisi
+    const hasLocation = rows.some((r) => r.location);
+    const header = hasLocation
+      ? 'No,Timestamp,Zona,Value,Unit,Status\n'
+      : 'No,Timestamp,Value,Unit,Status\n';
+
+    const body = rows
+      .map((entry, i) => {
+        const d = entry.timestamp instanceof Date
+          ? entry.timestamp
+          : new Date(String(entry.timestamp).replace('Z', ''));
+
+        const pad = (n) => String(n).padStart(2, '0');
+        const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+        // Escape nilai yang mungkin mengandung koma
+        const escapeCsv = (val) => {
+          const s = String(val ?? '');
+          return s.includes(',') ? `"${s}"` : s;
+        };
+
+        const statusMap = { good: 'Normal', warning: 'Peringatan', danger: 'Bahaya' };
+        const statusLabel = statusMap[entry.status] || entry.status || 'Normal';
+
+        if (hasLocation) {
+          return `${i + 1},${ts},${escapeCsv(entry.location ?? '')},${entry.value},${entry.unit},${statusLabel}`;
+        }
+        return `${i + 1},${ts},${entry.value},${entry.unit},${statusLabel}`;
+      })
+      .join('\n');
+
+    return header + body;
+  };
+
+  // ─── Export CSV ─────────────────────────────────────────
+  const handleExport = async () => {
+    try {
+      if (filteredHistory.length === 0) {
+        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor dengan filter saat ini.');
+        return;
+      }
+
+      const csvContent = buildCSV(filteredHistory);
+      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_');
+      const fileName = `uniflow_${safeName}_${Date.now()}.csv`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+
+      // Tulis file
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // Cek ketersediaan sharing
+      const isAvailable = await Sharing.isAvailableAsync();
+
+      if (isAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: `Export Riwayat ${title}`,
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        // Fallback: share sebagai teks (untuk emulator / platform yang tidak support file sharing)
+        await Share.share({
+          message: csvContent,
+          title: `UniFlow - Riwayat ${title}`,
+        });
+      }
+    } catch (err) {
+      logError('HistoryModal.export', err);
+      Alert.alert(
+        'Export Gagal',
+        'Tidak dapat mengekspor data. Pastikan izin penyimpanan telah diberikan.',
+      );
+    }
+  };
+
+  // Reset quick zone ketika filter modal berubah
+  const handleApplyFilter = (filter) => {
+    setActiveFilter(filter);
+    setQuickZone(null);
+  };
+
+  const clearAllFilters = () => {
+    setActiveFilter({ startDate: null, endDate: null, zone: null });
+    setQuickZone(null);
+  };
+
+  const activeQuickZoneOrModal = quickZone || activeFilter.zone;
+  const showingZoneLabel = quickZone || activeFilter.zone;
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
@@ -499,7 +606,10 @@ const handleExport = async () => {
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>Riwayat {title}</Text>
               <Text style={styles.headerSubtitle}>
-                {filteredHistory.length} data{isFiltered ? ` · ${filterLabel()}` : ' · 3 bulan terakhir'}
+                {filteredHistory.length} data
+                {(isFiltered || quickZone)
+                  ? ` · ${[filterLabel(), quickZone].filter(Boolean).join(' · ')}`
+                  : ' · 3 bulan terakhir'}
               </Text>
             </View>
 
@@ -528,23 +638,86 @@ const handleExport = async () => {
             </View>
           </View>
 
-          {/* Active filter chip */}
-          {isFiltered && (
-            <View style={{ flexDirection: 'row', marginTop: 10 }}>
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 5,
-                backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20,
-                paddingHorizontal: 10, paddingVertical: 4,
-              }}>
-                <Ionicons name="calendar" size={11} color="#fff" />
-                <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{filterLabel()}</Text>
-                <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}>
-                  <Ionicons name="close-circle" size={13} color="rgba(255,255,255,0.8)" />
-                </TouchableOpacity>
-              </View>
+          {/* Active filter chips */}
+          {(isFiltered || quickZone) && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 6 }}>
+              {isFiltered && (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                  backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20,
+                  paddingHorizontal: 10, paddingVertical: 4,
+                }}>
+                  <Ionicons name="calendar" size={11} color="#fff" />
+                  <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{filterLabel()}</Text>
+                  <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}>
+                    <Ionicons name="close-circle" size={13} color="rgba(255,255,255,0.8)" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {quickZone && (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 5,
+                  backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20,
+                  paddingHorizontal: 10, paddingVertical: 4,
+                }}>
+                  <Ionicons name="location" size={11} color="#fff" />
+                  <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{quickZone}</Text>
+                  <TouchableOpacity onPress={() => setQuickZone(null)}>
+                    <Ionicons name="close-circle" size={13} color="rgba(255,255,255,0.8)" />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
         </LinearGradient>
+
+        {/* ── Quick Zone Filter Pills (tampil di bawah header jika multi-zona) ── */}
+        {zonesAfterModal.length > 1 && (
+          <View style={{
+            backgroundColor: '#F0F9FF',
+            borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
+            paddingVertical: 10, paddingHorizontal: 16,
+          }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <Ionicons name="location-outline" size={13} color="#8BAFC0" style={{ marginRight: 2 }} />
+                {/* Pill "Semua" */}
+                <TouchableOpacity
+                  onPress={() => setQuickZone(null)}
+                  style={{
+                    paddingHorizontal: 12, paddingVertical: 5,
+                    borderRadius: 16, borderWidth: 1.5,
+                    borderColor: quickZone === null ? '#7CB9D8' : '#D1E8F5',
+                    backgroundColor: quickZone === null ? '#7CB9D8' : '#fff',
+                  }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: quickZone === null ? '#fff' : '#8BAFC0' }}>
+                    Semua
+                  </Text>
+                </TouchableOpacity>
+
+                {zonesAfterModal.map((z) => (
+                  <TouchableOpacity
+                    key={z}
+                    onPress={() => setQuickZone(quickZone === z ? null : z)}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 5,
+                      borderRadius: 16, borderWidth: 1.5,
+                      borderColor: quickZone === z ? '#5AA3C8' : '#D1E8F5',
+                      backgroundColor: quickZone === z ? '#EFF8FF' : '#fff',
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <Ionicons name="location-outline" size={11} color={quickZone === z ? '#2A7DA0' : '#8BAFC0'} />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: quickZone === z ? '#2A7DA0' : '#8BAFC0' }}>
+                      {z}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
 
         {/* ── List ── */}
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -552,57 +725,67 @@ const handleExport = async () => {
             {filteredHistory.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <Ionicons
-                  name={isFiltered ? 'search-outline' : 'time-outline'}
+                  name={(isFiltered || quickZone) ? 'search-outline' : 'time-outline'}
                   size={36}
                   color="#C5DDE8"
                 />
                 <Text style={styles.emptyText}>
-                  {isFiltered ? 'Tidak ada data untuk filter ini' : 'Belum ada data riwayat'}
+                  {(isFiltered || quickZone) ? 'Tidak ada data untuk filter ini' : 'Belum ada data riwayat'}
                 </Text>
-                {isFiltered && (
-                  <TouchableOpacity
-                    onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}
-                    style={{ marginTop: 8 }}
-                  >
-                    <Text style={{ fontSize: 12, color: '#7CB9D8', fontWeight: '600' }}>Hapus filter</Text>
+                {(isFiltered || quickZone) && (
+                  <TouchableOpacity onPress={clearAllFilters} style={{ marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, color: '#7CB9D8', fontWeight: '600' }}>Hapus semua filter</Text>
                   </TouchableOpacity>
                 )}
               </View>
-            ) : filteredHistory.map((entry, index) => {
-              const trend  = getTrend(index);
-              const tmeta  = trendMeta[trend];
-              const config = statusConfig[entry.status] || statusConfig.good;
-              return (
-                <View key={index} style={styles.card}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.cardDate}>{formatDate(entry.timestamp)}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
-                      <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+            ) : (
+              filteredHistory.map((entry, index) => {
+                const trend  = getTrend(index);
+                const tmeta  = trendMeta[trend];
+                const config = statusConfig[entry.status] || statusConfig.good;
+
+                return (
+                  <View key={index} style={styles.card}>
+                    <View style={styles.cardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardDate}>{formatDate(entry.timestamp)}</Text>
+                        {/* Tampilkan zona jika ada dan tidak sedang difilter ke 1 zona */}
+                        {entry.location && !showingZoneLabel && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                            <Ionicons name="location-outline" size={11} color="#8BAFC0" />
+                            <Text style={{ fontSize: 11, color: '#8BAFC0', fontWeight: '500' }}>
+                              {entry.location}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
+                        <Text style={[styles.statusText, { color: config.color }]}>{config.label}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.cardBody}>
+                      <View style={styles.valueRow}>
+                        <Text style={styles.value}>{entry.value}</Text>
+                        <Text style={styles.unit}>{entry.unit}</Text>
+                      </View>
+                      <View style={[styles.trendPill, { backgroundColor: tmeta.color + '18' }]}>
+                        <Ionicons name={tmeta.icon} size={13} color={tmeta.color} />
+                        <Text style={[styles.trendText, { color: tmeta.color }]}>{tmeta.label}</Text>
+                      </View>
                     </View>
                   </View>
-                  <View style={styles.cardBody}>
-                    <View style={styles.valueRow}>
-                      <Text style={styles.value}>{entry.value}</Text>
-                      <Text style={styles.unit}>{entry.unit}</Text>
-                    </View>
-                    <View style={[styles.trendPill, { backgroundColor: tmeta.color + '18' }]}>
-                      <Ionicons name={tmeta.icon} size={13} color={tmeta.color} />
-                      <Text style={[styles.trendText, { color: tmeta.color }]}>{tmeta.label}</Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })
+            )}
           </View>
         </ScrollView>
-
       </View>
 
       {/* Calendar Filter Modal */}
       <CalendarFilterModal
         visible={showFilter}
         onClose={() => setShowFilter(false)}
-        onApply={setActiveFilter}
+        onApply={handleApplyFilter}
         history={history}
         zones={zones}
       />
