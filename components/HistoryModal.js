@@ -504,21 +504,21 @@ export default function HistoryModal({ visible, onClose, data }) {
   // ─── Export params ──────────────────────────────────────
 const buildExportParams = () => {
   const params = {};
-
   if (activeFilter.zone || quickZone) {
     params.zone = activeFilter.zone || quickZone;
   }
-
   if (activeFilter.startDate) {
     const { startDate, endDate } = activeFilter;
-
-    params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')}`;
-
+    params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2,'0')}-${String(startDate.day).padStart(2,'0')}`;
+    
+    // TAMBAH INI: kalau tidak ada endDate, default ke hari ini
     if (endDate) {
-      params.end = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
+      params.end = `${endDate.year}-${String(endDate.month + 1).padStart(2,'0')}-${String(endDate.day).padStart(2,'0')}`;
+    } else {
+      const today = new Date();
+      params.end = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
     }
   }
-
   return params;
 };
 
