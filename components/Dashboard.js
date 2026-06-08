@@ -97,6 +97,7 @@ const buildHistory = (list, field, unit) =>
     value: parseFloat(item[field]).toFixed(1),
     unit,
     status: 'good',
+    location: item.location || null,   // ← tambah ini
   }));
 
 const SEVERITY_BG    = { low: '#FEF3C7', medium: '#FED7AA', high: '#FEE2E2', critical: '#FECACA' };
@@ -218,6 +219,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           value: item.wqi_score != null ? Math.round(item.wqi_score) : '-',
           unit: 'Skor',
           status: mapWQIStatus(item.wqi_status),
+          location: item.location || null, 
         })),
       });
 

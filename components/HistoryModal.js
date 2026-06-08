@@ -8,6 +8,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { historyModalStyles as styles } from '../styles/historyModalStyles';
 import { getSensorCSVUrl } from '../services/api';
 import { logError } from '../utils/errorHandler';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -22,10 +24,9 @@ const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
 // ─── Calendar Filter Modal ─────────────────────────────────
-function CalendarFilterModal({ visible, onClose, onApply, history }) {
+function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const now = new Date();
 
-  // Cari tahun & bulan yang ada datanya
   const dataDateSet = useMemo(() => {
     const set = new Set();
     history.forEach((h) => {
@@ -38,18 +39,17 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
   const hasDataOnDate = (year, month, day) =>
     dataDateSet.has(`${year}-${month}-${day}`);
 
-  // State kalender
-  const [viewYear,  setViewYear]  = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth());
-  const [startDate, setStartDate] = useState(null); // { year, month, day }
-  const [endDate,   setEndDate]   = useState(null);
-  const [selecting, setSelecting] = useState('start'); // 'start' | 'end'
+  const [viewYear,    setViewYear]    = useState(now.getFullYear());
+  const [viewMonth,   setViewMonth]   = useState(now.getMonth());
+  const [startDate,   setStartDate]   = useState(null);
+  const [endDate,     setEndDate]     = useState(null);
+  const [selecting,   setSelecting]   = useState('start');
+  const [activeZone,  setActiveZone]  = useState(null); // null = semua zona
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
     else setViewMonth((m) => m - 1);
   };
-
   const nextMonth = () => {
     if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
     else setViewMonth((m) => m + 1);
@@ -67,7 +67,6 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
       const s = toDateObj(startDate);
       const e = new Date(viewYear, viewMonth, day);
       if (e < s) {
-        // Kalau end < start, swap
         setEndDate(startDate);
         setStartDate(selected);
       } else {
@@ -84,31 +83,28 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
   };
 
   const isStart = (day) =>
-    startDate &&
-    startDate.year === viewYear &&
-    startDate.month === viewMonth &&
-    startDate.day === day;
+    startDate && startDate.year === viewYear &&
+    startDate.month === viewMonth && startDate.day === day;
 
   const isEnd = (day) =>
-    endDate &&
-    endDate.year === viewYear &&
-    endDate.month === viewMonth &&
-    endDate.day === day;
+    endDate && endDate.year === viewYear &&
+    endDate.month === viewMonth && endDate.day === day;
 
   const handleReset = () => {
     setStartDate(null);
     setEndDate(null);
     setSelecting('start');
+    setActiveZone(null);
   };
 
   const handleApply = () => {
-    onApply({ startDate, endDate });
+    onApply({ startDate, endDate, zone: activeZone });
     onClose();
   };
 
-  const daysInMonth   = getDaysInMonth(viewYear, viewMonth);
-  const firstDay      = getFirstDayOfMonth(viewYear, viewMonth);
-  const totalCells    = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  const daysInMonth = getDaysInMonth(viewYear, viewMonth);
+  const firstDay    = getFirstDayOfMonth(viewYear, viewMonth);
+  const totalCells  = Math.ceil((firstDay + daysInMonth) / 7) * 7;
 
   const formatSelected = (d) => {
     if (!d) return '--';
@@ -128,7 +124,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
             padding: 16, borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
           }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>Filter Tanggal</Text>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>Filter</Text>
             <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
               <TouchableOpacity onPress={handleReset}>
                 <Text style={{ fontSize: 12, color: '#8BAFC0', fontWeight: '600' }}>Reset</Text>
@@ -139,23 +135,76 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
             </View>
           </View>
 
+          {/* ── ZONA SECTION ── */}
+          {zones && zones.length > 0 && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 8 }}>
+                Zona / Lokasi
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {/* Pill "Semua" */}
+                  <TouchableOpacity
+                    onPress={() => setActiveZone(null)}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 7,
+                      borderRadius: 20, borderWidth: 1.5,
+                      borderColor: activeZone === null ? '#7CB9D8' : '#D1E8F5',
+                      backgroundColor: activeZone === null ? '#7CB9D8' : '#F9FAFB',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 12, fontWeight: '700',
+                      color: activeZone === null ? '#fff' : '#8BAFC0',
+                    }}>
+                      Semua
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Pill per zona */}
+                  {zones.map((z) => (
+                    <TouchableOpacity
+                      key={z}
+                      onPress={() => setActiveZone(activeZone === z ? null : z)}
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 7,
+                        borderRadius: 20, borderWidth: 1.5,
+                        borderColor: activeZone === z ? '#5AA3C8' : '#D1E8F5',
+                        backgroundColor: activeZone === z ? '#EFF8FF' : '#F9FAFB',
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: 12, fontWeight: '700',
+                        color: activeZone === z ? '#2A7DA0' : '#8BAFC0',
+                      }}>
+                        {z}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: '#EAF4FB', marginTop: 12, marginHorizontal: 16 }} />
+
+          {/* ── TANGGAL SECTION ── */}
+          <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', paddingHorizontal: 16, paddingTop: 14, marginBottom: 8 }}>
+            Rentang Tanggal
+          </Text>
+
           {/* Pilih range indicator */}
-          <View style={{
-            flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4,
-          }}>
-            {/* Start */}
+          <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity
               onPress={() => setSelecting('start')}
               style={{
-                flex: 1, borderRadius: 12, padding: 10,
-                borderWidth: 1.5,
+                flex: 1, borderRadius: 12, padding: 10, borderWidth: 1.5,
                 borderColor: selecting === 'start' ? '#7CB9D8' : '#D1E8F5',
                 backgroundColor: selecting === 'start' ? '#EFF8FF' : '#F9FAFB',
               }}
             >
-              <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 3 }}>
-                DARI
-              </Text>
+              <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 3 }}>DARI</Text>
               <Text style={{ fontSize: 13, fontWeight: '700', color: startDate ? '#1A3040' : '#B0CFE0' }}>
                 {formatSelected(startDate)}
               </Text>
@@ -165,19 +214,15 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
               <Ionicons name="arrow-forward" size={16} color="#B0CFE0" />
             </View>
 
-            {/* End */}
             <TouchableOpacity
               onPress={() => setSelecting('end')}
               style={{
-                flex: 1, borderRadius: 12, padding: 10,
-                borderWidth: 1.5,
+                flex: 1, borderRadius: 12, padding: 10, borderWidth: 1.5,
                 borderColor: selecting === 'end' ? '#7CB9D8' : '#D1E8F5',
                 backgroundColor: selecting === 'end' ? '#EFF8FF' : '#F9FAFB',
               }}
             >
-              <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 3 }}>
-                SAMPAI
-              </Text>
+              <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 3 }}>SAMPAI</Text>
               <Text style={{ fontSize: 13, fontWeight: '700', color: endDate ? '#1A3040' : '#B0CFE0' }}>
                 {formatSelected(endDate)}
               </Text>
@@ -190,30 +235,19 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
           </Text>
 
           {/* Navigasi bulan */}
-          <View style={{
-            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            paddingHorizontal: 16, paddingVertical: 12,
-          }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
             <TouchableOpacity
               onPress={prevMonth}
-              style={{
-                width: 34, height: 34, borderRadius: 10,
-                backgroundColor: '#EAF4FB', justifyContent: 'center', alignItems: 'center',
-              }}
+              style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#EAF4FB', justifyContent: 'center', alignItems: 'center' }}
             >
               <Ionicons name="chevron-back" size={18} color="#5AA3C8" />
             </TouchableOpacity>
-
             <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>
               {MONTHS_ID[viewMonth]} {viewYear}
             </Text>
-
             <TouchableOpacity
               onPress={nextMonth}
-              style={{
-                width: 34, height: 34, borderRadius: 10,
-                backgroundColor: '#EAF4FB', justifyContent: 'center', alignItems: 'center',
-              }}
+              style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#EAF4FB', justifyContent: 'center', alignItems: 'center' }}
             >
               <Ionicons name="chevron-forward" size={18} color="#5AA3C8" />
             </TouchableOpacity>
@@ -241,7 +275,6 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
                   const isS      = isValid && isStart(day);
                   const isE      = isValid && isEnd(day);
                   const isMarked = isS || isE;
-
                   return (
                     <TouchableOpacity
                       key={dayIdx}
@@ -249,11 +282,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
                       activeOpacity={isValid ? 0.7 : 1}
                       style={{
                         flex: 1, height: 38, alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: isMarked
-                          ? '#7CB9D8'
-                          : inRange
-                            ? '#EAF4FB'
-                            : 'transparent',
+                        backgroundColor: isMarked ? '#7CB9D8' : inRange ? '#EAF4FB' : 'transparent',
                         borderRadius: isMarked ? 10 : inRange ? 0 : 10,
                         borderTopLeftRadius:  isS ? 10 : inRange ? 0 : 10,
                         borderBottomLeftRadius: isS ? 10 : inRange ? 0 : 10,
@@ -264,19 +293,13 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
                       {isValid ? (
                         <>
                           <Text style={{
-                            fontSize: 13,
-                            fontWeight: isMarked ? '700' : '500',
+                            fontSize: 13, fontWeight: isMarked ? '700' : '500',
                             color: isMarked ? '#fff' : inRange ? '#2A7DA0' : '#1A3040',
                           }}>
                             {day}
                           </Text>
-                          {/* Dot indikator ada data */}
                           {hasData && !isMarked && (
-                            <View style={{
-                              width: 4, height: 4, borderRadius: 2,
-                              backgroundColor: '#7CB9D8',
-                              position: 'absolute', bottom: 4,
-                            }} />
+                            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#7CB9D8', position: 'absolute', bottom: 4 }} />
                           )}
                         </>
                       ) : null}
@@ -291,19 +314,21 @@ function CalendarFilterModal({ visible, onClose, onApply, history }) {
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <TouchableOpacity
               onPress={handleApply}
-              disabled={!startDate}
+              disabled={!startDate && !activeZone}
               activeOpacity={0.85}
               style={{
-                backgroundColor: startDate ? '#7CB9D8' : '#C5DDE8',
+                backgroundColor: (startDate || activeZone) ? '#7CB9D8' : '#C5DDE8',
                 borderRadius: 14, paddingVertical: 13, alignItems: 'center',
               }}
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
                 {startDate && endDate
-                  ? `Tampilkan ${formatSelected(startDate)} – ${formatSelected(endDate)}`
+                  ? `Tampilkan ${formatSelected(startDate)} – ${formatSelected(endDate)}${activeZone ? ` · ${activeZone}` : ''}`
                   : startDate
-                    ? `Tampilkan dari ${formatSelected(startDate)}`
-                    : 'Pilih tanggal dulu'}
+                    ? `Tampilkan dari ${formatSelected(startDate)}${activeZone ? ` · ${activeZone}` : ''}`
+                    : activeZone
+                      ? `Tampilkan zona: ${activeZone}`
+                      : 'Pilih filter dulu'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -320,7 +345,7 @@ export default function HistoryModal({ visible, onClose, data }) {
   const HEADER_COLORS = ['#2E7CA8', '#1A5E8A'];
 
   const [showFilter,   setShowFilter]   = useState(false);
-  const [activeFilter, setActiveFilter] = useState({ startDate: null, endDate: null });
+  const [activeFilter, setActiveFilter] = useState({ startDate: null, endDate: null, zone: null });
 
   const statusConfig = {
     good:    { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
@@ -346,22 +371,38 @@ export default function HistoryModal({ visible, onClose, data }) {
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
 
-  const filteredHistory = useMemo(() => {
-    const { startDate, endDate } = activeFilter;
-    if (!startDate) return history;
+ const filteredHistory = useMemo(() => {
+  const { startDate, endDate, zone } = activeFilter;
+  let result = history;
 
+  // Filter tanggal
+  if (startDate) {
     const start = new Date(startDate.year, startDate.month, startDate.day, 0, 0, 0);
-    const end   = endDate
+    const end = endDate
       ? new Date(endDate.year, endDate.month, endDate.day, 23, 59, 59)
       : new Date(startDate.year, startDate.month, startDate.day, 23, 59, 59);
 
-    return history.filter((entry) => {
+    result = result.filter((entry) => {
       const d = entry.timestamp instanceof Date
         ? entry.timestamp
         : new Date(String(entry.timestamp).replace('Z', ''));
+
       return d >= start && d <= end;
     });
-  }, [history, activeFilter]);
+  }
+
+  // Filter zona
+  if (zone) {
+    result = result.filter((entry) => entry.location === zone);
+  }
+
+  return result;
+}, [history, activeFilter]);
+
+const zones = useMemo(() => {
+  const set = new Set(history.map((h) => h.location).filter(Boolean));
+  return Array.from(set).sort();
+}, [history]);
 
   const getTrend = (index) => {
     if (index === filteredHistory.length - 1) return 'stable';
@@ -378,30 +419,71 @@ export default function HistoryModal({ visible, onClose, data }) {
     stable: { icon: 'remove',        color: '#8BAFC0', label: 'Stabil' },
   };
 
-  const isFiltered = !!activeFilter.startDate;
+ const isFiltered = !!activeFilter.startDate || !!activeFilter.zone;
 
-  const filterLabel = () => {
-    const { startDate, endDate } = activeFilter;
-    if (!startDate) return null;
+const filterLabel = () => {
+  const { startDate, endDate, zone } = activeFilter;
+  const parts = [];
+
+  if (startDate) {
     const s = `${startDate.day} ${MONTHS_SHORT[startDate.month]} ${startDate.year}`;
-    if (!endDate) return s;
-    const e = `${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`;
-    return `${s} – ${e}`;
-  };
+    const e = endDate
+      ? ` – ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
+      : '';
 
-  const handleExport = async () => {
-    const csvUrl = getSensorCSVUrl(90);
-    try {
-      if (await Linking.canOpenURL(csvUrl)) {
-        await Linking.openURL(csvUrl);
-      } else {
-        await Share.share({ message: `Download CSV data sensor: ${csvUrl}`, title: `UniFlow - Riwayat ${title}` });
-      }
-    } catch (err) {
-      logError('HistoryModal.export', err);
+    parts.push(s + e);
+  }
+
+  if (zone) parts.push(zone);
+
+  return parts.join(' · ') || null;
+};
+
+  // ─── Helper: build CSV string dari filteredHistory ─────────
+const buildCSV = (rows) => {
+  const header = 'No,Timestamp,Value,Unit,Status\n';
+  const body = rows
+    .map((entry, i) => {
+      // Format timestamp ke ISO lokal (tanpa Z agar mudah dibaca di Excel)
+      const d = entry.timestamp instanceof Date
+        ? entry.timestamp
+        : new Date(String(entry.timestamp).replace('Z', ''));
+      const ts = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+      return `${i+1},${ts},${entry.value},${entry.unit},${entry.status}`;
+    })
+    .join('\n');
+  return header + body;
+};
+
+const handleExport = async () => {
+  try {
+    if (filteredHistory.length === 0) return;
+
+    const csvContent = buildCSV(filteredHistory);
+    const fileName = `uniflow_${title.replace(/\s+/g, '_')}_${Date.now()}.csv`;
+    const fileUri = FileSystem.documentDirectory + fileName;
+
+    await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (isAvailable) {
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: `Export Riwayat ${title}`,
+        UTI: 'public.comma-separated-values-text',
+      });
+    } else {
+      await Share.share({
+        message: csvContent,
+        title: `UniFlow - Riwayat ${title}`,
+      });
     }
-  };
-
+  } catch (err) {
+    logError('HistoryModal.export', err);
+  }
+};
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
@@ -456,7 +538,7 @@ export default function HistoryModal({ visible, onClose, data }) {
               }}>
                 <Ionicons name="calendar" size={11} color="#fff" />
                 <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{filterLabel()}</Text>
-                <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null })}>
+                <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}>
                   <Ionicons name="close-circle" size={13} color="rgba(255,255,255,0.8)" />
                 </TouchableOpacity>
               </View>
@@ -479,7 +561,7 @@ export default function HistoryModal({ visible, onClose, data }) {
                 </Text>
                 {isFiltered && (
                   <TouchableOpacity
-                    onPress={() => setActiveFilter({ startDate: null, endDate: null })}
+                    onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}
                     style={{ marginTop: 8 }}
                   >
                     <Text style={{ fontSize: 12, color: '#7CB9D8', fontWeight: '600' }}>Hapus filter</Text>
@@ -522,6 +604,7 @@ export default function HistoryModal({ visible, onClose, data }) {
         onClose={() => setShowFilter(false)}
         onApply={setActiveFilter}
         history={history}
+        zones={zones}
       />
     </Modal>
   );
