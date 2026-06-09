@@ -91,14 +91,23 @@ const parseLocalDate = (str) => {
   return new Date(typeof str === 'string' ? str.replace('Z', '') : str);
 };
 
-const buildHistory = (list, field, unit) =>
-  list.map((item) => ({
-    timestamp: parseLocalDate(item.created_at),
-    value: parseFloat(item[field]).toFixed(1),
-    unit,
-    status: 'good',
-    location: item.location || null,   // ← tambah ini
-  }));
+const buildHistory = (list, field, unit, th = {}) =>
+  list.map((item) => {
+    const fieldMap = {
+      ph:          [th.ph_min   ?? 6.5,  th.ph_max   ?? 8.5 ],
+      temperature: [th.temp_min ?? 10,   th.temp_max ?? 35  ],
+      tds:         [th.tds_min  ?? 0,    th.tds_max  ?? 500 ],
+      turbidity:   [th.tss_min  ?? 0,    th.tss_max  ?? 25  ],
+    };
+    const [min, max] = fieldMap[field] ?? [null, null];
+    return {
+      timestamp: parseLocalDate(item.created_at),
+      value: parseFloat(item[field]).toFixed(field === 'tds' ? 0 : 1),
+      unit,
+      status: getStatus(item[field], min, max),   // ← pakai helper yang sudah ada
+      location: item.location || null,
+    };
+  });
 
 const SEVERITY_BG    = { low: '#FEF3C7', medium: '#FED7AA', high: '#FEE2E2', critical: '#FECACA' };
 const SEVERITY_TEXT  = { low: '#92400E', medium: '#C2410C', high: '#991B1B', critical: '#7F1D1D' };
@@ -379,15 +388,15 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
   // ─── History helpers ─────────────────────────────────────
   const getHistoryForParam = (id) => {
-    const map = {
-      1: ['ph',          'pH'],
-      2: ['temperature', '°C'],
-      3: ['tds',         'ppm'],
-      4: ['turbidity',   'NTU'],
-    };
-    const [field, unit] = map[id] || [];
-    return buildHistory(historyList, field, unit);
+  const map = {
+    1: ['ph',          'pH'],
+    2: ['temperature', '°C'],
+    3: ['tds',         'ppm'],
+    4: ['turbidity',   'NTU'],
   };
+  const [field, unit] = map[id] || [];
+  return buildHistory(historyList, field, unit, threshold);  // ← tambah threshold
+};
 
   const selectedData = qualityData.find((d) => d.id === selectedParameter);
   const selectedDataWithHistory = selectedData
