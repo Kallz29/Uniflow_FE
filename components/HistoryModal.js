@@ -46,8 +46,6 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const [endDate,    setEndDate]    = useState(null);
   const [selecting,  setSelecting]  = useState('start');
   const [activeZone, setActiveZone] = useState(null);
-  const [startHour, setStartHour] = useState(0);
-  const [endHour,   setEndHour]   = useState(23);
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -98,14 +96,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
     setEndDate(null);
     setSelecting('start');
     setActiveZone(null);
-    setStartHour(0);   // ← tambah
-    setEndHour(23);    // ← tambah
   };
 
   const handleApply = () => {
-  onApply({ startDate, endDate, zone: activeZone, startHour, endHour }); // ← tambah startHour, endHour
-  onClose();
-};
+    onApply({ startDate, endDate, zone: activeZone });
+    onClose();
+  };
 
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay    = getFirstDayOfMonth(viewYear, viewMonth);
@@ -282,65 +278,6 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
           <Text style={{ fontSize: 11, color: '#8BAFC0', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 2 }}>
   {selecting === 'start' ? 'Ketuk tanggal mulai' : 'Ketuk tanggal akhir'}
 </Text>
-{/* ── JAM SECTION ── */}
-<View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
-  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 8 }}>
-    Rentang Jam
-  </Text>
-  <View style={{ flexDirection: 'row', gap: 10 }}>
-    {/* Jam Mulai */}
-    <View style={{ flex: 1 }}>
-      <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23].map((h) => (
-            <TouchableOpacity
-              key={h}
-              onPress={() => setStartHour(h)}
-              style={{
-                width: 38, height: 32, borderRadius: 8,
-                borderWidth: 1.5,
-                borderColor: startHour === h ? '#7CB9D8' : '#D1E8F5',
-                backgroundColor: startHour === h ? '#7CB9D8' : '#F9FAFB',
-                justifyContent: 'center', alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: startHour === h ? '#fff' : '#8BAFC0' }}>
-                {String(h).padStart(2,'0')}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
-  </View>
-
-  {/* Jam Akhir */}
-  <View style={{ marginTop: 8 }}>
-    <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI JAM</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23].map((h) => (
-          <TouchableOpacity
-            key={h}
-            onPress={() => setEndHour(h)}
-            style={{
-              width: 38, height: 32, borderRadius: 8,
-              borderWidth: 1.5,
-              borderColor: endHour === h ? '#7CB9D8' : '#D1E8F5',
-              backgroundColor: endHour === h ? '#7CB9D8' : '#F9FAFB',
-              justifyContent: 'center', alignItems: 'center',
-            }}
-          >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: endHour === h ? '#fff' : '#8BAFC0' }}>
-              {String(h).padStart(2,'0')}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </ScrollView>
-  </View>
-</View>
           {/* Navigasi bulan */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
             <TouchableOpacity
@@ -492,14 +429,14 @@ export default function HistoryModal({ visible, onClose, data }) {
 
   // Filter utama dari CalendarFilterModal
   const filteredByModal = useMemo(() => {
-    const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
+    const { startDate, endDate, zone } = activeFilter;
     let result = history;
 
     if (startDate) {
-      const start = new Date(startDate.year, startDate.month, startDate.day, startHour, 0, 0);
-const end = endDate
-  ? new Date(endDate.year, endDate.month, endDate.day, endHour, 59, 59)
-  : new Date(startDate.year, startDate.month, startDate.day, endHour, 59, 59);
+      const start = new Date(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+      const end = endDate
+        ? new Date(endDate.year, endDate.month, endDate.day, 23, 59, 59)
+        : new Date(startDate.year, startDate.month, startDate.day, 23, 59, 59);
 
       result = result.filter((entry) => {
         const d = entry.timestamp instanceof Date
@@ -550,11 +487,12 @@ const end = endDate
     const parts = [];
 
     if (startDate) {
-  const timeStr = startHour !== 0 || endHour !== 23
-    ? ` (${String(startHour).padStart(2,'0')}:00–${String(endHour).padStart(2,'0')}:59)`
-    : '';
-  parts.push(s + e + timeStr);
-}
+      const s = `${startDate.day} ${MONTHS_SHORT[startDate.month]} ${startDate.year}`;
+      const e = endDate
+        ? ` - ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
+        : '';
+      parts.push(s + e);
+    }
 
     if (zone) parts.push(zone);
 
