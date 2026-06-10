@@ -549,10 +549,21 @@ export default function WiFiManager({ onConnected }) {
   const [scanHint,      setScanHint]      = useState(null);
   const [localIp,       setLocalIp]       = useState(null);
   const [retryInfo,     setRetryInfo]     = useState(null);
+  const [espConnected, setEspConnected]       = useState(false);
+  const [espConnectedSsid, setEspConnectedSsid] = useState(null);
 
   const headerOpac = useRef(new Animated.Value(0)).current;
   const headerY    = useRef(new Animated.Value(-20)).current;
   const spinAnim   = useRef(new Animated.Value(0)).current;
+  const keepAliveRef  = useRef(null);
+  const appStateRef   = useRef(AppState.currentState);
+
+  const handleEspConnected = useCallback((ssid) => {
+    clearInterval(keepAliveRef.current);
+    setEspConnected(true);
+    setEspConnectedSsid(ssid);
+    setTimeout(() => onConnected?.(), 1500);
+  }, [onConnected]);
 
   // ── Fix: jaga agar HP tidak drop dari UniFlow-Setup ──────────
   //
@@ -562,9 +573,6 @@ export default function WiFiManager({ onConnected }) {
   //     → menjaga ARP table + cegah Android idle-drop interface
   //  2. AppState listener: kalau app kembali ke foreground, langsung
   //     re-check status (user mungkin sempat buka Settings WiFi)
-  const keepAliveRef  = useRef(null);
-  const appStateRef   = useRef(AppState.currentState);
-
   const pingESP = useCallback(async () => {
     try {
       // Ping ringan — hanya butuh response apa saja
@@ -578,6 +586,7 @@ export default function WiFiManager({ onConnected }) {
   }, []);
 
   useEffect(() => {
+    if (espConnected) return;
     // Mulai keep-alive ping tiap 3 detik
     keepAliveRef.current = setInterval(pingESP, 3000);
 
@@ -593,7 +602,7 @@ export default function WiFiManager({ onConnected }) {
       clearInterval(keepAliveRef.current);
       sub.remove();
     };
-  }, [pingESP]);
+  }, [pingESP, espConnected]);
 
   useEffect(() => {
     Animated.parallel([
@@ -634,6 +643,13 @@ export default function WiFiManager({ onConnected }) {
         setScanHint(null);
       } catch (e) {
         setScanHint(null);
+      }
+
+      // Kalau ESP sudah connected ke WiFi, stop scan langsung
+      if (statusResult?.connected && statusResult?.ssid) {
+        handleEspConnected(statusResult.ssid);
+        setScanning(false);
+        return;
       }
 
       try {
@@ -690,13 +706,14 @@ export default function WiFiManager({ onConnected }) {
     } finally {
       setScanning(false);
     }
-  }, []);
+  }, [handleEspConnected]);
 
   useEffect(() => {
+    if (espConnected) return;
     doScan();
     const iv = setInterval(doScan, SCAN_INTERVAL);
     return () => clearInterval(iv);
-  }, [doScan]);
+  }, [doScan, espConnected]);
 
   const handleSelectNetwork = (network) => {
     setSelectedNet(network);
@@ -714,10 +731,13 @@ export default function WiFiManager({ onConnected }) {
    * Redirect ke Dashboard langsung — tidak ada state tambahan yang perlu diset.
    */
   const handleSuccess = useCallback((ssid) => {
-    clearInterval(keepAliveRef.current);  // hentikan keep-alive, sudah tidak di WiFiManager
     setShowConnect(false);
-    onConnected?.();
-  }, [onConnected]);
+    if (ssid) {
+      handleEspConnected(ssid);
+    } else {
+      onConnected?.();
+    }
+  }, [handleEspConnected, onConnected]);
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
@@ -875,7 +895,27 @@ export default function WiFiManager({ onConnected }) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
       >
-        {scanError ? (
+        {espConnected ? (
+          <View style={{
+            backgroundColor: '#F0FDF4', borderRadius: 16, padding: 24,
+            alignItems: 'center', borderWidth: 1, borderColor: '#BBF7D0', marginTop: 8, gap: 12,
+          }}>
+            <View style={{
+              width: 64, height: 64, borderRadius: 32,
+              backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Ionicons name="checkmark-circle" size={40} color="#22C55E" />
+            </View>
+            <View style={{ alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D' }}>
+                {espConnectedSsid}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#16A34A' }}>Connected</Text>
+            </View>
+            <ActivityIndicator size="small" color="#22C55E" />
+            <Text style={{ fontSize: 11, color: '#86EFAC' }}>Mengalihkan ke Dashboard...</Text>
+          </View>
+        ) : scanError ? (
           <View style={{
             backgroundColor: '#FEF2F2', borderRadius: 16, padding: 24,
             alignItems: 'center', borderWidth: 1, borderColor: '#FECACA', marginTop: 8,
@@ -951,4 +991,3 @@ export default function WiFiManager({ onConnected }) {
     </View>
   );
 }
-  

@@ -52,7 +52,6 @@ npx expo start
 
 ### Data
 - `data/teamMembers.js` - Data anggota tim (nama, NIM)
-- `data/waterQualityData.js` - Data parameter air, generator history, dan fungsi utilitas
 
 ### Styles (StyleSheet terpisah)
 - `styles/dashboardStyles.js` - Styles untuk Dashboard
