@@ -33,9 +33,20 @@ const buildCsvUrl = (params = {}) => {
 export const getLatestSensor = () =>
   apiClient.get('/sensors/latest', { tag: 'getLatestSensor' });
 
-/** GET /api/sensors?limit=N */
-export const getAllSensors = (limit = 50) =>
-  apiClient.get(`/sensors?${buildQueryString({ limit })}`, { tag: 'getAllSensors' });
+/** GET /api/sensors?limit=N&start=S&end=E&zone=Z */
+export const getAllSensors = (params = {}) => {
+  const queryParams = typeof params === 'number'
+    ? { limit: params }
+    : {
+      limit: params.limit,
+      start: params.start,
+      end: params.end,
+      zone: params.zone,
+    };
+  const query = buildQueryString(queryParams);
+
+  return apiClient.get(`/sensors${query ? `?${query}` : ''}`, { tag: 'getAllSensors' });
+};
 
 /** GET /api/sensors/stats */
 export const getSensorStats = () =>

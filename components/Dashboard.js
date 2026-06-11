@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, Dimensions,
-  TextInput, Alert, Animated,
+  TextInput, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,7 +12,7 @@ import {
   getAllSensors, getLatestSensor, getSensorStats,
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
   updateThreshold, resetThreshold,
-  getAllDevices, updateDevice,
+  getAllDevices, createDevice, updateDevice,
   startMeasurement, stopMeasurement, getMeasurements,
 } from '../services/api';
 import { checkESPReachable } from '../services/espDevice';
@@ -89,7 +89,8 @@ const mapSensorToCards = (data, threshold) => {
 
 const parseLocalDate = (str) => {
   if (!str) return new Date();
-  return new Date(str);
+  const utc = new Date(str);
+  return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
 };
 
 const buildHistory = (list, field, unit, th = {}) =>
@@ -106,7 +107,7 @@ const buildHistory = (list, field, unit, th = {}) =>
       value: parseFloat(item[field]).toFixed(field === 'tds' ? 0 : 1),
       unit,
       status: getStatus(item[field], min, max),   // ← pakai helper yang sudah ada
-      location: item.location || null,
+      location: item.session_location || item.location || null,
     };
   });
 
@@ -178,6 +179,10 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [editingLocation, setEditingLocation] = useState({});
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [editingDeviceCode, setEditingDeviceCode] = useState('');
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [newDeviceCode, setNewDeviceCode] = useState('');
+  const [newDeviceLocation, setNewDeviceLocation] = useState('');
+  const [addingDevice, setAddingDevice] = useState(false);
 
   // ── Sensor/Alert/Threshold Data ──
   const [qualityData, setQualityData] = useState([]);
@@ -187,6 +192,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [alerts, setAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [threshold, setThreshold] = useState(null);
+  const [lastAlertTime, setLastAlertTime] = useState({});
+  const lastAlertTimeRef = useRef({});
 
   // Measurement Session
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -196,7 +203,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [showMeasurementModal, setShowMeasurementModal] = useState(false);
   const [selectedDeviceForMeasurement, setSelectedDeviceForMeasurement] = useState(null);
   const [measurementLocation, setMeasurementLocation] = useState('');
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -207,8 +213,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const fetchData = useCallback(async () => {
     try {
       setError(null);
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      const pad = (n) => String(n).padStart(2, '0');
+      const startStr = `${threeMonthsAgo.getFullYear()}-${pad(threeMonthsAgo.getMonth() + 1)}-${pad(threeMonthsAgo.getDate())}`;
       const [latestRes, allRes, statsRes, alertsRes, thresholdRes] = await Promise.all([
-        getLatestSensor(), getAllSensors(100), getSensorStats(),
+        getLatestSensor(), getAllSensors({ limit: 2000, start: startStr }), getSensorStats(),
         getAlerts({ limit: 20 }), getThreshold(),
       ]);
 
@@ -234,7 +244,19 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       setHistoryList(list);
       setStats(statsData);
       setAlerts(alertList);
-      setUnreadCount(alertList.filter((a) => !a.is_read).length);
+
+      const ALERT_THROTTLE_MS = 5 * 60 * 1000;
+      const now = Date.now();
+      const currentLastAlertTime = lastAlertTimeRef.current;
+      const filteredAlerts = alertList.filter((a) => {
+        const lastTime = currentLastAlertTime[a.parameter];
+        return !lastTime || (now - lastTime) > ALERT_THROTTLE_MS;
+      });
+      const newLastAlertTime = { ...currentLastAlertTime };
+      filteredAlerts.forEach((a) => { newLastAlertTime[a.parameter] = now; });
+      lastAlertTimeRef.current = newLastAlertTime;
+      setLastAlertTime(newLastAlertTime);
+      setUnreadCount(filteredAlerts.filter((a) => !a.is_read).length);
 
       const backendScore = latest.wqi_score != null ? Math.round(latest.wqi_score) : null;
       const backendStatus = mapWQIStatus(latest.wqi_status);
@@ -252,7 +274,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           value: item.wqi_score != null ? Math.round(item.wqi_score) : '-',
           unit: 'Skor',
           status: mapWQIStatus(item.wqi_status),
-          location: item.location || null,
+          location: item.session_location || item.location || null,
         })),
       });
 
@@ -296,23 +318,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
   }, [activeMeasurement]);
-
-  useEffect(() => {
-    if (!activeMeasurement) {
-      pulseAnim.setValue(1);
-      return undefined;
-    }
-
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.85, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [activeMeasurement, pulseAnim]);
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
@@ -466,6 +471,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     setDeviceMsg(null);
     setSelectedDevice(null);
     setEditingDeviceCode('');
+    setShowAddDevice(false);
+    setNewDeviceCode('');
+    setNewDeviceLocation('');
     setShowDeviceModal(true);
     setDeviceLoading(true);
     try {
@@ -580,25 +588,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             </View>
           </View>
           <View style={styles.headerIcons}>
-            {/* Recording / Measurement */}
-            <TouchableOpacity
-              onPress={activeMeasurement ? handleStopMeasurement : openMeasurementModal}
-              style={[
-                styles.statusIndicator,
-                activeMeasurement && { backgroundColor: 'rgba(239,68,68,0.25)' },
-              ]}
-              disabled={measurementLoading}
-            >
-              {measurementLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons
-                  name={activeMeasurement ? 'radio-button-on' : 'radio-button-off'}
-                  size={20}
-                  color={activeMeasurement ? '#FCA5A5' : '#FFFFFF'}
-                />
-              )}
-            </TouchableOpacity>
             {/* Notifications */}
             <TouchableOpacity onPress={() => setShowAlertsModal(true)} style={styles.statusIndicator}>
               <Ionicons name="notifications" size={20} color="#FFFFFF" />
@@ -636,36 +625,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           <Text style={styles.errorText}>Gagal mengambil data: {error}</Text>
           <TouchableOpacity onPress={fetchData}>
             <Text style={styles.errorRetry}>Coba lagi →</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Active measurement banner */}
-      {activeMeasurement && (
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FECACA',
-          paddingHorizontal: 16, paddingVertical: 10, gap: 10,
-        }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' }} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#991B1B' }}>
-              Sesi Pengukuran Aktif
-            </Text>
-            <Text style={{ fontSize: 11, color: '#B91C1C' }}>
-              {activeMeasurement.location || activeMeasurement.device?.location || 'Lokasi tidak diketahui'} - sejak {activeMeasurement.start_time ? new Date(activeMeasurement.start_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleStopMeasurement}
-            disabled={measurementLoading}
-            style={{ backgroundColor: '#EF4444', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
-          >
-            {measurementLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Stop</Text>
-            )}
           </TouchableOpacity>
         </View>
       )}
@@ -715,45 +674,34 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
           {/* Start / Stop Measurement */}
           <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
-            <Animated.View style={{ transform: [{ scale: activeMeasurement ? pulseAnim : 1 }] }}>
-              <TouchableOpacity
-                onPress={activeMeasurement ? handleStopMeasurement : openMeasurementModal}
-                disabled={measurementLoading}
-                activeOpacity={0.85}
-                style={{
-                  borderRadius: 12, paddingVertical: 13, overflow: 'hidden',
-                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
-                  backgroundColor: activeMeasurement ? '#DC2626' : '#16A34A',
-                  borderWidth: activeMeasurement ? 2 : 0,
-                  borderColor: activeMeasurement ? '#FCA5A5' : 'transparent',
-                }}
-              >
-                {measurementLoading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <View style={{
-                      width: 10, height: 10, borderRadius: 5,
-                      backgroundColor: activeMeasurement ? '#FCA5A5' : '#86EFAC',
-                    }} />
-                    <View>
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14, textAlign: 'center', letterSpacing: 0.5 }}>
-                        {activeMeasurement ? 'STOP' : 'START'}
+            <TouchableOpacity
+              onPress={activeMeasurement ? handleStopMeasurement : openMeasurementModal}
+              disabled={measurementLoading}
+              activeOpacity={0.85}
+              style={{
+                backgroundColor: activeMeasurement ? '#DC2626' : '#16A34A',
+                borderRadius: 12, paddingVertical: 13,
+                flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+              }}
+            >
+              {measurementLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={18} color="#fff" />
+                  <View>
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
+                      {activeMeasurement ? 'Stop' : 'Start'}
+                    </Text>
+                    {activeMeasurement && (
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
+                        {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi Aktif'}
                       </Text>
-                      {activeMeasurement ? (
-                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
-                          {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi Aktif'}
-                        </Text>
-                      ) : (
-                        <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
-                          Mulai sesi pengukuran
-                        </Text>
-                      )}
-                    </View>
-                  </>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
+                    )}
+                  </View>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.metricsSection}>
@@ -1230,6 +1178,100 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   Edit nama lokasi untuk setiap perangkat sensor yang terdaftar, lalu tekan Simpan.
                 </Text>
               </View>
+
+              {!selectedDevice && (showAddDevice ? (
+                <View style={{ marginBottom: 16 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowAddDevice(false);
+                      setNewDeviceCode('');
+                      setNewDeviceLocation('');
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
+                  >
+                    <Ionicons name="chevron-back" size={16} color="#5AA3C8" />
+                    <Text style={{ fontSize: 12, color: '#5AA3C8', fontWeight: '600' }}>Batal</Text>
+                  </TouchableOpacity>
+
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 6 }}>Kode Device</Text>
+                  <TextInput
+                    value={newDeviceCode}
+                    onChangeText={setNewDeviceCode}
+                    placeholder="Contoh: UNIFLOW-02"
+                    placeholderTextColor="#B0CFE0"
+                    style={{
+                      borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      padding: 10, fontSize: 13, color: '#1A3040', backgroundColor: '#fff', marginBottom: 12,
+                    }}
+                  />
+
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 6 }}>Lokasi</Text>
+                  <TextInput
+                    value={newDeviceLocation}
+                    onChangeText={setNewDeviceLocation}
+                    placeholder="Contoh: Asrama"
+                    placeholderTextColor="#B0CFE0"
+                    style={{
+                      borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      padding: 10, fontSize: 13, color: '#1A3040', backgroundColor: '#fff', marginBottom: 16,
+                    }}
+                  />
+
+                  <TouchableOpacity
+                    onPress={async () => {
+                      if (!newDeviceCode.trim()) {
+                        setDeviceMsg({ type: 'err', text: 'Kode device tidak boleh kosong' });
+                        return;
+                      }
+                      setAddingDevice(true);
+                      setDeviceMsg(null);
+                      try {
+                        await createDevice({
+                          device_code: newDeviceCode.trim(),
+                          location: newDeviceLocation.trim(),
+                        });
+                        setDeviceMsg({ type: 'ok', text: 'Device berhasil ditambahkan!' });
+                        setShowAddDevice(false);
+                        setNewDeviceCode('');
+                        setNewDeviceLocation('');
+                        const res = await getAllDevices();
+                        setDevices(res.data || []);
+                      } catch (err) {
+                        setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal menambah device') });
+                      } finally {
+                        setAddingDevice(false);
+                      }
+                    }}
+                    disabled={addingDevice}
+                    style={{
+                      backgroundColor: newDeviceCode.trim() ? '#3E8FB8' : '#C5DDE8',
+                      borderRadius: 12, paddingVertical: 12,
+                      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    {addingDevice ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="add-circle" size={16} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Tambah Device</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowAddDevice(true)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                    borderWidth: 1.5, borderColor: '#D1E8F5', borderStyle: 'dashed',
+                    borderRadius: 14, padding: 14, marginBottom: 12, gap: 8,
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#5AA3C8" />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#5AA3C8' }}>Tambah Device Baru</Text>
+                </TouchableOpacity>
+              ))}
 
               {deviceLoading ? (
                 <View style={{ padding: 40, alignItems: 'center' }}>

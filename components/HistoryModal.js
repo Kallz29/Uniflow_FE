@@ -22,6 +22,12 @@ const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 // ─── Helpers kalender ──────────────────────────────────────
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+const toWibDate = (value) => {
+  if (!value) return new Date();
+  if (value instanceof Date) return value;
+  const utc = new Date(value);
+  return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
+};
 
 // ─── Calendar Filter Modal ─────────────────────────────────
 function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
@@ -30,7 +36,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const dataDateSet = useMemo(() => {
     const set = new Set();
     history.forEach((h) => {
-      const d = new Date(h.timestamp);
+      const d = toWibDate(h.timestamp);
       set.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
     });
     return set;
@@ -476,14 +482,7 @@ export default function HistoryModal({
   };
 
   const formatDate = (date) => {
-    let d;
-    if (typeof date === 'string') {
-      d = new Date(date.replace('Z', ''));
-    } else if (date instanceof Date) {
-      d = date;
-    } else {
-      d = new Date(date);
-    }
+    const d = toWibDate(date);
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -514,9 +513,7 @@ export default function HistoryModal({
         : new Date(startDate.year, startDate.month, startDate.day, endHour, 59, 59);
 
       result = result.filter((entry) => {
-        const raw = entry.timestamp instanceof Date
-          ? entry.timestamp
-          : new Date(entry.timestamp);
+        const raw = toWibDate(entry.timestamp);
         return raw >= start && raw <= end;
       });
     }
@@ -582,11 +579,11 @@ export default function HistoryModal({
   const isInSession = (timestamp) => {
     if (!measurementsList.length) return null;
 
-    const t = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const t = toWibDate(timestamp);
 
     for (const session of measurementsList) {
-      const start = new Date(session.start_time);
-      const end = session.end_time ? new Date(session.end_time) : new Date();
+      const start = toWibDate(session.start_time);
+      const end = session.end_time ? toWibDate(session.end_time) : new Date();
 
       if (t >= start && t <= end) {
         return session;
@@ -617,9 +614,7 @@ export default function HistoryModal({
 
     const header = cols.map(escapeCsv).join(',') + '\n';
     const body = rows.map((entry, i) => {
-      const d = entry.timestamp instanceof Date
-        ? entry.timestamp
-        : new Date(entry.timestamp);
+      const d = toWibDate(entry.timestamp);
       const pad = (n) => String(n).padStart(2, '0');
       const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
       const statusMap = { good: 'Normal', warning: 'Peringatan', danger: 'Bahaya' };
