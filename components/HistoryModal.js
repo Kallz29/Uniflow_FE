@@ -10,7 +10,6 @@ import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { exportSensorCSV } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -286,53 +285,60 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
 
           {/* JAM SECTION */}
           <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 8 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 10 }}>
               Rentang Jam
             </Text>
-
-            <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                {Array.from({ length: 24 }, (_, h) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10, backgroundColor: '#F9FAFB', overflow: 'hidden' }}>
                   <TouchableOpacity
-                    key={h}
-                    onPress={() => setStartHour(h)}
-                    style={{
-                      width: 38, height: 32, borderRadius: 8, borderWidth: 1.5,
-                      borderColor: startHour === h ? '#7CB9D8' : '#D1E8F5',
-                      backgroundColor: startHour === h ? '#7CB9D8' : '#F9FAFB',
-                      justifyContent: 'center', alignItems: 'center',
-                    }}
+                    onPress={() => setStartHour((h) => Math.max(0, h - 1))}
+                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: startHour === h ? '#fff' : '#8BAFC0' }}>
-                      {String(h).padStart(2, '0')}
-                    </Text>
+                    <Ionicons name="remove" size={16} color="#5AA3C8" />
                   </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-
-            <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginTop: 10, marginBottom: 4 }}>SAMPAI JAM</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                {Array.from({ length: 24 }, (_, h) => (
+                  <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#1A3040' }}>
+                    {String(startHour).padStart(2, '0')}:00
+                  </Text>
                   <TouchableOpacity
-                    key={h}
-                    onPress={() => setEndHour(h)}
-                    style={{
-                      width: 38, height: 32, borderRadius: 8, borderWidth: 1.5,
-                      borderColor: endHour === h ? '#7CB9D8' : '#D1E8F5',
-                      backgroundColor: endHour === h ? '#7CB9D8' : '#F9FAFB',
-                      justifyContent: 'center', alignItems: 'center',
-                    }}
+                    onPress={() => setStartHour((h) => Math.min(endHour, h + 1))}
+                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: endHour === h ? '#fff' : '#8BAFC0' }}>
-                      {String(h).padStart(2, '0')}
-                    </Text>
+                    <Ionicons name="add" size={16} color="#5AA3C8" />
                   </TouchableOpacity>
-                ))}
+                </View>
               </View>
-            </ScrollView>
+
+              <Ionicons name="arrow-forward" size={16} color="#B0CFE0" style={{ marginTop: 16 }} />
+
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10, backgroundColor: '#F9FAFB', overflow: 'hidden' }}>
+                  <TouchableOpacity
+                    onPress={() => setEndHour((h) => Math.max(startHour, h - 1))}
+                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+                  >
+                    <Ionicons name="remove" size={16} color="#5AA3C8" />
+                  </TouchableOpacity>
+                  <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#1A3040' }}>
+                    {String(endHour).padStart(2, '0')}:59
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setEndHour((h) => Math.min(23, h + 1))}
+                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+                  >
+                    <Ionicons name="add" size={16} color="#5AA3C8" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {startHour === 0 && endHour === 23 && (
+              <Text style={{ fontSize: 10, color: '#B0CFE0', marginTop: 6 }}>
+                Default: semua jam (00:00 - 23:59)
+              </Text>
+            )}
           </View>
 
           {/* Navigasi bulan */}
@@ -440,7 +446,13 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
 }
 
 // ─── HistoryModal ──────────────────────────────────────────
-export default function HistoryModal({ visible, onClose, data }) {
+export default function HistoryModal({
+  visible,
+  onClose,
+  data,
+  activeMeasurement,
+  measurementsList = [],
+}) {
   const { title, color, history = [] } = data;
 
   const HEADER_COLORS = ['#2E7CA8', '#1A5E8A'];
@@ -502,10 +514,10 @@ export default function HistoryModal({ visible, onClose, data }) {
         : new Date(startDate.year, startDate.month, startDate.day, endHour, 59, 59);
 
       result = result.filter((entry) => {
-        const d = entry.timestamp instanceof Date
+        const raw = entry.timestamp instanceof Date
           ? entry.timestamp
-          : new Date(String(entry.timestamp).replace('Z', ''));
-        return d >= start && d <= end;
+          : new Date(entry.timestamp);
+        return raw >= start && raw <= end;
       });
     }
 
@@ -567,49 +579,113 @@ export default function HistoryModal({ visible, onClose, data }) {
 
   // ─── Build CSV string ───────────────────────────────────
   // ─── Export params ──────────────────────────────────────
-  const buildExportParams = () => {
-    const params = {};
-    if (activeFilter.zone || quickZone) {
-      params.zone = activeFilter.zone || quickZone;
+  const isInSession = (timestamp) => {
+    if (!measurementsList.length) return null;
+
+    const t = timestamp instanceof Date ? timestamp : new Date(timestamp);
+
+    for (const session of measurementsList) {
+      const start = new Date(session.start_time);
+      const end = session.end_time ? new Date(session.end_time) : new Date();
+
+      if (t >= start && t <= end) {
+        return session;
+      }
     }
-    if (activeFilter.startDate) {
-      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
-      params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')} ${String(startHour).padStart(2, '0')}:00:00`;
-      const ed = endDate || startDate;
-      params.end = `${ed.year}-${String(ed.month + 1).padStart(2, '0')}-${String(ed.day).padStart(2, '0')} ${String(endHour).padStart(2, '0')}:59:59`;
-    }
-    return params;
+
+    return false;
+  };
+
+  const buildCSVWithSession = (rows) => {
+    const hasLocation = rows.some((r) => r.location);
+    const hasSessions = measurementsList.length > 0;
+    const escapeCsv = (val) => {
+      const s = String(val ?? '');
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const cols = [
+      'No',
+      'Timestamp',
+      hasLocation && 'Zona',
+      'Value',
+      'Unit',
+      'Status',
+      hasSessions && 'Sesi',
+      hasSessions && 'ID Sesi',
+    ].filter(Boolean);
+
+    const header = cols.map(escapeCsv).join(',') + '\n';
+    const body = rows.map((entry, i) => {
+      const d = entry.timestamp instanceof Date
+        ? entry.timestamp
+        : new Date(entry.timestamp);
+      const pad = (n) => String(n).padStart(2, '0');
+      const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      const statusMap = { good: 'Normal', warning: 'Peringatan', danger: 'Bahaya' };
+      const statusLabel = statusMap[entry.status] || entry.status || 'Normal';
+      const session = hasSessions ? isInSession(entry.timestamp) : null;
+      const sessionLabel = session === null
+        ? ''
+        : session
+          ? `Ya - ${session.location || `Sesi #${session.id}`}`
+          : '-';
+      const sessionId = session ? String(session.id) : '-';
+
+      const values = [
+        String(i + 1),
+        ts,
+        hasLocation && (entry.location ?? ''),
+        String(entry.value),
+        entry.unit,
+        statusLabel,
+        hasSessions && sessionLabel,
+        hasSessions && sessionId,
+      ].filter((v) => v !== false);
+
+      return values.map(escapeCsv).join(',');
+    }).join('\n');
+
+    return header + body;
+  };
+
+  const buildExportFileName = () => {
+    const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+    const zoneStr = (activeFilter.zone || quickZone || 'semua')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toLowerCase();
+
+    return `uniflow_${safeName}_${dateStr}_${zoneStr}.csv`;
   };
 
   // ─── Export CSV ─────────────────────────────────────────
   const handleExport = async () => {
     try {
-      const url = exportSensorCSV(buildExportParams());
+      if (filteredHistory.length === 0) {
+        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
+        return;
+      }
 
-      const parameterName = title
-        .replace(/[^a-zA-Z0-9_]/g, '_')
-        .toLowerCase();
-
-      const now = new Date();
-      const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-
-      const zoneStr = (activeFilter.zone || quickZone || 'semua')
-        .replace(/[^a-zA-Z0-9]/g, '_')
-        .toLowerCase();
-
-      const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
-
+      const csvContent = buildCSVWithSession(filteredHistory);
+      const fileName = buildExportFileName();
+      const fileUri = FileSystem.documentDirectory + fileName;
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
       const isAvailable = await Sharing.isAvailableAsync();
 
       if (isAvailable) {
-        await Sharing.shareAsync(url, {
+        await Sharing.shareAsync(fileUri, {
           mimeType: 'text/csv',
-          dialogTitle: `Export ${parameterName}`,
+          dialogTitle: `Export ${title}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
         await Share.share({
-          message: url,
+          message: csvContent,
           title: fileName,
         });
       }
@@ -620,28 +696,28 @@ export default function HistoryModal({ visible, onClose, data }) {
   };
 
   const handleExportWeb = () => {
-    const url = exportSensorCSV(buildExportParams());
+    try {
+      if (filteredHistory.length === 0) {
+        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
+        return;
+      }
 
-    const parameterName = title
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .toLowerCase();
+      const csvContent = buildCSVWithSession(filteredHistory);
+      const fileName = buildExportFileName();
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
 
-    const now = new Date();
-    const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-
-    const zoneStr = (activeFilter.zone || quickZone || 'semua')
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .toLowerCase();
-
-    const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', fileName);
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      logError('HistoryModal.exportWeb', err);
+      Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
+    }
   };
   // Reset quick zone ketika filter modal berubah
   const handleApplyFilter = (filter) => {
