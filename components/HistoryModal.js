@@ -14,11 +14,11 @@ import { exportSensorCSV } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
-  'Januari','Februari','Maret','April','Mei','Juni',
-  'Juli','Agustus','September','Oktober','November','Desember',
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
-const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
-const DAYS_ID = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 // ─── Helpers kalender ──────────────────────────────────────
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
@@ -40,12 +40,14 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const hasDataOnDate = (year, month, day) =>
     dataDateSet.has(`${year}-${month}-${day}`);
 
-  const [viewYear,   setViewYear]   = useState(now.getFullYear());
-  const [viewMonth,  setViewMonth]  = useState(now.getMonth());
-  const [startDate,  setStartDate]  = useState(null);
-  const [endDate,    setEndDate]    = useState(null);
-  const [selecting,  setSelecting]  = useState('start');
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+  const [selecting, setSelecting] = useState('start');
   const [activeZone, setActiveZone] = useState(null);
+  const [startHour, setStartHour] = useState(0);
+  const [endHour, setEndHour] = useState(23);
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -96,16 +98,18 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
     setEndDate(null);
     setSelecting('start');
     setActiveZone(null);
+    setStartHour(0);
+    setEndHour(23);
   };
 
   const handleApply = () => {
-    onApply({ startDate, endDate, zone: activeZone });
+    onApply({ startDate, endDate, zone: activeZone, startHour, endHour });
     onClose();
   };
 
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
-  const firstDay    = getFirstDayOfMonth(viewYear, viewMonth);
-  const totalCells  = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
+  const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
 
   const formatSelected = (d) => {
     if (!d) return '--';
@@ -124,11 +128,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-        <View style={{
-          backgroundColor: '#fff',
-          borderTopLeftRadius: 24, borderTopRightRadius: 24,
-          paddingBottom: 32,
-        }}>
+        <ScrollView
+          style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Header modal */}
           <View style={{
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -276,8 +281,60 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
 
           {/* Hint */}
           <Text style={{ fontSize: 11, color: '#8BAFC0', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 2 }}>
-  {selecting === 'start' ? 'Ketuk tanggal mulai' : 'Ketuk tanggal akhir'}
-</Text>
+            {selecting === 'start' ? 'Ketuk tanggal mulai' : 'Ketuk tanggal akhir'}
+          </Text>
+
+          {/* JAM SECTION */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 8 }}>
+              Rentang Jam
+            </Text>
+
+            <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <TouchableOpacity
+                    key={h}
+                    onPress={() => setStartHour(h)}
+                    style={{
+                      width: 38, height: 32, borderRadius: 8, borderWidth: 1.5,
+                      borderColor: startHour === h ? '#7CB9D8' : '#D1E8F5',
+                      backgroundColor: startHour === h ? '#7CB9D8' : '#F9FAFB',
+                      justifyContent: 'center', alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: startHour === h ? '#fff' : '#8BAFC0' }}>
+                      {String(h).padStart(2, '0')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginTop: 10, marginBottom: 4 }}>SAMPAI JAM</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <TouchableOpacity
+                    key={h}
+                    onPress={() => setEndHour(h)}
+                    style={{
+                      width: 38, height: 32, borderRadius: 8, borderWidth: 1.5,
+                      borderColor: endHour === h ? '#7CB9D8' : '#D1E8F5',
+                      backgroundColor: endHour === h ? '#7CB9D8' : '#F9FAFB',
+                      justifyContent: 'center', alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: endHour === h ? '#fff' : '#8BAFC0' }}>
+                      {String(h).padStart(2, '0')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+
           {/* Navigasi bulan */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
             <TouchableOpacity
@@ -312,12 +369,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
               <View key={weekIdx} style={{ flexDirection: 'row', marginBottom: 4 }}>
                 {Array.from({ length: 7 }).map((_, dayIdx) => {
                   const cellNum = weekIdx * 7 + dayIdx;
-                  const day     = cellNum - firstDay + 1;
+                  const day = cellNum - firstDay + 1;
                   const isValid = day >= 1 && day <= daysInMonth;
                   const hasData = isValid && hasDataOnDate(viewYear, viewMonth, day);
                   const inRange = isValid && isInRange(day);
-                  const isS     = isValid && isStart(day);
-                  const isE     = isValid && isEnd(day);
+                  const isS = isValid && isStart(day);
+                  const isE = isValid && isEnd(day);
                   const isMarked = isS || isE;
                   return (
                     <TouchableOpacity
@@ -376,7 +433,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -388,16 +445,22 @@ export default function HistoryModal({ visible, onClose, data }) {
 
   const HEADER_COLORS = ['#2E7CA8', '#1A5E8A'];
 
-  const [showFilter,   setShowFilter]   = useState(false);
-  const [activeFilter, setActiveFilter] = useState({ startDate: null, endDate: null, zone: null });
+  const [showFilter, setShowFilter] = useState(false);
+  const [activeFilter, setActiveFilter] = useState({
+    startDate: null,
+    endDate: null,
+    zone: null,
+    startHour: 0,
+    endHour: 23,
+  });
 
   // ── Quick zone filter langsung dari header list (tanpa buka modal) ──
   const [quickZone, setQuickZone] = useState(null);
 
   const statusConfig = {
-    good:    { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
+    good: { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
     warning: { bg: '#FEF3C7', color: '#92400E', label: 'Peringatan' },
-    danger:  { bg: '#FEE2E2', color: '#991B1B', label: 'Bahaya' },
+    danger: { bg: '#FEE2E2', color: '#991B1B', label: 'Bahaya' },
   };
 
   const formatDate = (date) => {
@@ -409,11 +472,11 @@ export default function HistoryModal({ visible, onClose, data }) {
     } else {
       d = new Date(date);
     }
-    const today     = new Date();
+    const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    if (d.toDateString() === today.toDateString())     return `Hari ini, ${timeStr}`;
+    if (d.toDateString() === today.toDateString()) return `Hari ini, ${timeStr}`;
     if (d.toDateString() === yesterday.toDateString()) return `Kemarin, ${timeStr}`;
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
@@ -429,14 +492,14 @@ export default function HistoryModal({ visible, onClose, data }) {
 
   // Filter utama dari CalendarFilterModal
   const filteredByModal = useMemo(() => {
-    const { startDate, endDate, zone } = activeFilter;
+    const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
     let result = history;
 
     if (startDate) {
-      const start = new Date(startDate.year, startDate.month, startDate.day, 0, 0, 0);
+      const start = new Date(startDate.year, startDate.month, startDate.day, startHour, 0, 0);
       const end = endDate
-        ? new Date(endDate.year, endDate.month, endDate.day, 23, 59, 59)
-        : new Date(startDate.year, startDate.month, startDate.day, 23, 59, 59);
+        ? new Date(endDate.year, endDate.month, endDate.day, endHour, 59, 59)
+        : new Date(startDate.year, startDate.month, startDate.day, endHour, 59, 59);
 
       result = result.filter((entry) => {
         const d = entry.timestamp instanceof Date
@@ -475,15 +538,15 @@ export default function HistoryModal({ visible, onClose, data }) {
   };
 
   const trendMeta = {
-    up:     { icon: 'trending-up',   color: '#16A34A', label: 'Naik'   },
-    down:   { icon: 'trending-down', color: '#DC2626', label: 'Turun'  },
-    stable: { icon: 'remove',        color: '#8BAFC0', label: 'Stabil' },
+    up: { icon: 'trending-up', color: '#16A34A', label: 'Naik' },
+    down: { icon: 'trending-down', color: '#DC2626', label: 'Turun' },
+    stable: { icon: 'remove', color: '#8BAFC0', label: 'Stabil' },
   };
 
   const isFiltered = !!activeFilter.startDate || !!activeFilter.zone;
 
   const filterLabel = () => {
-    const { startDate, endDate, zone } = activeFilter;
+    const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
     const parts = [];
 
     if (startDate) {
@@ -491,7 +554,10 @@ export default function HistoryModal({ visible, onClose, data }) {
       const e = endDate
         ? ` - ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
         : '';
-      parts.push(s + e);
+      const timeStr = (startHour !== 0 || endHour !== 23)
+        ? ` - ${String(startHour).padStart(2, '0')}:00-${String(endHour).padStart(2, '0')}:59`
+        : '';
+      parts.push(s + e + timeStr);
     }
 
     if (zone) parts.push(zone);
@@ -501,29 +567,59 @@ export default function HistoryModal({ visible, onClose, data }) {
 
   // ─── Build CSV string ───────────────────────────────────
   // ─── Export params ──────────────────────────────────────
-const buildExportParams = () => {
-  const params = {};
-  if (activeFilter.zone || quickZone) {
-    params.zone = activeFilter.zone || quickZone;
-  }
-  if (activeFilter.startDate) {
-    const { startDate, endDate } = activeFilter;
-    params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2,'0')}-${String(startDate.day).padStart(2,'0')}`;
-    
-    // TAMBAH INI: kalau tidak ada endDate, default ke hari ini
-    if (endDate) {
-      params.end = `${endDate.year}-${String(endDate.month + 1).padStart(2,'0')}-${String(endDate.day).padStart(2,'0')}`;
-    } else {
-      const today = new Date();
-      params.end = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const buildExportParams = () => {
+    const params = {};
+    if (activeFilter.zone || quickZone) {
+      params.zone = activeFilter.zone || quickZone;
     }
-  }
-  return params;
-};
+    if (activeFilter.startDate) {
+      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
+      params.start = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')} ${String(startHour).padStart(2, '0')}:00:00`;
+      const ed = endDate || startDate;
+      params.end = `${ed.year}-${String(ed.month + 1).padStart(2, '0')}-${String(ed.day).padStart(2, '0')} ${String(endHour).padStart(2, '0')}:59:59`;
+    }
+    return params;
+  };
 
-// ─── Export CSV ─────────────────────────────────────────
-const handleExport = async () => {
-  try {
+  // ─── Export CSV ─────────────────────────────────────────
+  const handleExport = async () => {
+    try {
+      const url = exportSensorCSV(buildExportParams());
+
+      const parameterName = title
+        .replace(/[^a-zA-Z0-9_]/g, '_')
+        .toLowerCase();
+
+      const now = new Date();
+      const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+
+      const zoneStr = (activeFilter.zone || quickZone || 'semua')
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .toLowerCase();
+
+      const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
+
+      const isAvailable = await Sharing.isAvailableAsync();
+
+      if (isAvailable) {
+        await Sharing.shareAsync(url, {
+          mimeType: 'text/csv',
+          dialogTitle: `Export ${parameterName}`,
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        await Share.share({
+          message: url,
+          title: fileName,
+        });
+      }
+    } catch (err) {
+      logError('HistoryModal.export', err);
+      Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
+    }
+  };
+
+  const handleExportWeb = () => {
     const url = exportSensorCSV(buildExportParams());
 
     const parameterName = title
@@ -539,50 +635,14 @@ const handleExport = async () => {
 
     const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
 
-    const isAvailable = await Sharing.isAvailableAsync();
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
 
-    if (isAvailable) {
-      await Sharing.shareAsync(url, {
-        mimeType: 'text/csv',
-        dialogTitle: `Export ${parameterName}`,
-        UTI: 'public.comma-separated-values-text',
-      });
-    } else {
-      await Share.share({
-        message: url,
-        title: fileName,
-      });
-    }
-  } catch (err) {
-    logError('HistoryModal.export', err);
-    Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
-  }
-};
-
-const handleExportWeb = () => {
-  const url = exportSensorCSV(buildExportParams());
-
-  const parameterName = title
-    .replace(/[^a-zA-Z0-9_]/g, '_')
-    .toLowerCase();
-
-  const now = new Date();
-  const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-
-  const zoneStr = (activeFilter.zone || quickZone || 'semua')
-    .replace(/[^a-zA-Z0-9]/g, '_')
-    .toLowerCase();
-
-  const fileName = `${parameterName}_${dateStr}_${zoneStr}.csv`;
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', fileName);
-
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   // Reset quick zone ketika filter modal berubah
   const handleApplyFilter = (filter) => {
     setActiveFilter(filter);
@@ -590,7 +650,7 @@ const handleExportWeb = () => {
   };
 
   const clearAllFilters = () => {
-    setActiveFilter({ startDate: null, endDate: null, zone: null });
+    setActiveFilter({ startDate: null, endDate: null, zone: null, startHour: 0, endHour: 23 });
     setQuickZone(null);
   };
 
@@ -634,9 +694,9 @@ const handleExportWeb = () => {
                 />
               </TouchableOpacity>
 
-              <TouchableOpacity 
-  onPress={Platform.OS === 'web' ? handleExportWeb : handleExport} 
-  style={styles.headerBtn}>
+              <TouchableOpacity
+                onPress={Platform.OS === 'web' ? handleExportWeb : handleExport}
+                style={styles.headerBtn}>
                 <Ionicons name="download-outline" size={18} color="#fff" />
               </TouchableOpacity>
 
@@ -657,7 +717,7 @@ const handleExportWeb = () => {
                 }}>
                   <Ionicons name="calendar" size={11} color="#fff" />
                   <Text style={{ fontSize: 11, color: '#fff', fontWeight: '600' }}>{filterLabel()}</Text>
-                  <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null })}>
+                  <TouchableOpacity onPress={() => setActiveFilter({ startDate: null, endDate: null, zone: null, startHour: 0, endHour: 23 })}>
                     <Ionicons name="close-circle" size={13} color="rgba(255,255,255,0.8)" />
                   </TouchableOpacity>
                 </View>
@@ -748,8 +808,8 @@ const handleExportWeb = () => {
               </View>
             ) : (
               filteredHistory.map((entry, index) => {
-                const trend  = getTrend(index);
-                const tmeta  = trendMeta[trend];
+                const trend = getTrend(index);
+                const tmeta = trendMeta[trend];
                 const config = statusConfig[entry.status] || statusConfig.good;
 
                 return (

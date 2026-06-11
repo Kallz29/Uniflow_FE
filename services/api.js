@@ -2,14 +2,28 @@
 // API Service - UniFlow React Native
 // ============================================
 //
-// Catatan:
-// - Semua request sekarang lewat `apiClient` (utils/apiClient.js) yang
-//   sudah menangani timeout, parsing JSON/text, dan normalisasi error.
-// - Error yang di-throw dari fungsi-fungsi di file ini adalah `AppError`
-//   dengan pesan siap tampil (Bahasa Indonesia).
+// Semua request lewat `apiClient` (utils/apiClient.js), yang menangani
+// timeout, parsing JSON/text, dan normalisasi error menjadi AppError.
 
 import { BASE_URL } from '../config';
 import { apiClient } from '../utils/apiClient';
+
+const buildQueryString = (params = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value));
+    }
+  });
+
+  return query.toString();
+};
+
+const buildCsvUrl = (params = {}) => {
+  const query = buildQueryString(params);
+  return `${BASE_URL}/sensors/export/csv${query ? `?${query}` : ''}`;
+};
 
 // ============================================
 // SENSOR
@@ -21,15 +35,23 @@ export const getLatestSensor = () =>
 
 /** GET /api/sensors?limit=N */
 export const getAllSensors = (limit = 50) =>
-  apiClient.get(`/sensors?limit=${encodeURIComponent(limit)}`, { tag: 'getAllSensors' });
+  apiClient.get(`/sensors?${buildQueryString({ limit })}`, { tag: 'getAllSensors' });
 
 /** GET /api/sensors/stats */
 export const getSensorStats = () =>
   apiClient.get('/sensors/stats', { tag: 'getSensorStats' });
 
-/** GET /api/sensors/export/csv?days=N — return URL string untuk di-share/open. */
-export const getSensorCSVUrl = (days = 90) =>
-  `${BASE_URL}/sensors/export/csv?days=${encodeURIComponent(days)}`;
+/** GET /api/sensors/export/csv?days=N */
+export const getSensorCSVUrl = (days = 90) => buildCsvUrl({ days });
+
+/** GET /api/sensors/export/csv?days=N&zone=Z&start=S&end=E */
+export const exportSensorCSV = (params = {}) =>
+  buildCsvUrl({
+    zone: params.zone,
+    start: params.start,
+    end: params.end,
+    days: params.days,
+  });
 
 // ============================================
 // ALERTS
@@ -37,9 +59,12 @@ export const getSensorCSVUrl = (days = 90) =>
 
 /** GET /api/alerts?unread=true&limit=N */
 export const getAlerts = ({ unread = false, limit = 50 } = {}) => {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (unread) params.set('unread', 'true');
-  return apiClient.get(`/alerts?${params.toString()}`, { tag: 'getAlerts' });
+  const query = buildQueryString({
+    limit,
+    unread: unread ? 'true' : undefined,
+  });
+
+  return apiClient.get(`/alerts?${query}`, { tag: 'getAlerts' });
 };
 
 /** PATCH /api/alerts/:id/read */
@@ -85,13 +110,16 @@ export const createDevice = (deviceData) =>
 /**
  * PUT /api/devices/:id
  * Body: { location: string }
- * Contoh: updateDevice(1, { location: 'Saluran Air Utama GKU' })
  */
-export const updateDevice = (id, { location }) =>
-  apiClient.put(`/devices/${encodeURIComponent(id)}`, { location }, {
-    tag: 'updateDevice',
-    fallbackErrorMsg: 'Gagal memperbarui perangkat',
-  });
+export const updateDevice = (id, payload) =>
+  apiClient.put(
+    `/devices/${encodeURIComponent(id)}`,
+    payload,
+    {
+      tag: 'updateDevice',
+      fallbackErrorMsg: 'Gagal memperbarui perangkat',
+    }
+  );
 
 /** DELETE /api/devices/:id */
 export const deleteDevice = (id) =>
@@ -113,18 +141,19 @@ export const getAllChatSessions = () =>
   apiClient.get('/chat/sessions', { tag: 'getAllChatSessions' });
 
 /**
- * PATCH /api/chat/sessions/:id — update session title.
- * Backend ada yang support PATCH, ada yang hanya PUT — coba dua-duanya.
+ * PATCH /api/chat/sessions/:id
+ * Fallback ke PUT untuk backend yang belum mendukung PATCH.
  */
 export const updateChatSession = async (sessionId, title) => {
   const path = `/chat/sessions/${encodeURIComponent(sessionId)}`;
+
   try {
     return await apiClient.patch(path, { title }, { tag: 'updateChatSession:PATCH' });
   } catch (patchErr) {
-    // Kalau server tolak method, coba PUT sebagai fallback.
     if (patchErr?.status === 405 || patchErr?.status === 404) {
       return apiClient.put(path, { title }, { tag: 'updateChatSession:PUT' });
     }
+
     throw patchErr;
   }
 };
@@ -135,7 +164,7 @@ export const getChatMessages = (sessionId) =>
     tag: 'getChatMessages',
   });
 
-/** POST /api/chat/sessions/:id/messages — kirim pesan user, butuh waktu lebih lama (AI). */
+/** POST /api/chat/sessions/:id/messages */
 export const sendChatMessage = (sessionId, message) =>
   apiClient.post(
     `/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
@@ -150,12 +179,18 @@ export const deleteChatSession = (sessionId) =>
     fallbackErrorMsg: 'Gagal menghapus sesi',
   });
 
-  // GET /api/sensors/export/csv?days=N&zone=Z&start=S&end=E
-export const exportSensorCSV = (params = {}) => {
-  const query = new URLSearchParams();
-  if (params.zone)  query.set('zone', params.zone);
-  if (params.start) query.set('start', params.start);
-  if (params.end)   query.set('end', params.end);
-  if (params.days)  query.set('days', params.days);
-  return `${BASE_URL}/sensors/export/csv?${query.toString()}`;
-};
+// ============================================
+// MEASUREMENTS
+// ============================================
+
+/** POST /api/measurements/start */
+export const startMeasurement = (deviceCode) =>
+  apiClient.post('/measurements/start', { device_code: deviceCode }, { tag: 'startMeasurement' });
+
+/** POST /api/measurements/stop */
+export const stopMeasurement = (deviceCode) =>
+  apiClient.post('/measurements/stop', { device_code: deviceCode }, { tag: 'stopMeasurement' });
+
+/** GET /api/measurements */
+export const getMeasurements = () =>
+  apiClient.get('/measurements', { tag: 'getMeasurements' });
