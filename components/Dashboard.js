@@ -224,6 +224,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const refParams = useRef(null);
   const refStartBtn = useRef(null);
   const refNotifBtn = useRef(null);
+  const refAI = useRef(null);
   const refSettingBtn = useRef(null);
   const scrollRef = useRef(null);
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
@@ -593,7 +594,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       4: ['turbidity', 'NTU'],
     };
     const [field, unit] = map[id] || [];
-    return buildHistory(historyList, field, unit, threshold);  // ← tambah threshold
+    return buildHistory(historyList, field, unit, threshold);
   };
 
   const selectedData = qualityData.find((d) => d.id === selectedParameter);
@@ -677,7 +678,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               <Ionicons name="person" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             {/* AI Chat */}
-            <TouchableOpacity onPress={onNavigateToAI} style={styles.statusIndicator}>
+            <TouchableOpacity ref={refAI} onPress={onNavigateToAI} style={styles.statusIndicator}>
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             {/* Settings */}
@@ -1741,8 +1742,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       <QuickTour
         visible={showTour}
         onDone={() => setShowTour(false)}
-        refs={{ refWQI, refStats, refParams, refStartBtn, refNotifBtn, refSettingBtn }}
+        refs={{ refWQI, refStats, refParams, refStartBtn, refNotifBtn, refAI, refSettingBtn }}
         scrollRef={scrollRef}
+        onNavigateToAI={onNavigateToAI}
       />
     </ScrollView>
   );

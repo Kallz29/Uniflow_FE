@@ -1,123 +1,45 @@
-<<<<<<< HEAD
-# UniFlow - React Native App
+# UniFlow Mobile
 
-Aplikasi mobile monitoring kualitas air untuk universitas dengan React Native dan Expo.
+UniFlow adalah aplikasi Expo React Native untuk monitoring kualitas air secara real-time.
 
 ## Fitur
 
-- ✅ Splash Screen dengan animasi logo
-- ✅ Dashboard monitoring 4 parameter air (pH, Suhu, Padatan Terlarut, Kekeruhan)
-- ✅ Riwayat data lengkap dengan history modal (3 bulan terakhir, ~360 entries)
-- ✅ Export/Share data CSV
-- ✅ Auto-delete data lama (>3 bulan)
-- ✅ Halaman About Us dengan carousel tim (4 orang)
-- ✅ Navigasi antar halaman
-- ✅ Design sesuai palette warna biru UniFlow
-- ✅ Bahasa Indonesia
-- ✅ Full JavaScript (tanpa TypeScript)
-- ✅ **Styles terpisah di folder `/styles/`**
-- ✅ **Data terpisah di folder `/data/`**
-- ✅ **Constants terpisah di folder `/constants/`**
+- Dashboard WQI dan parameter air: pH, suhu, TDS, dan kekeruhan.
+- Status koneksi perangkat sensor.
+- Riwayat data per parameter dan WQI.
+- Filter riwayat berdasarkan lokasi, tanggal, dan jam.
+- Tampilan riwayat dibatasi maksimal 100 data terakhir sesuai filter.
+- Export CSV langsung dari backend untuk mengambil seluruh data atau seluruh data sesuai filter.
+- Sesi pengukuran dengan lokasi pengambilan sampel.
+- Notifikasi alert saat parameter melewati ambang.
+- AI Assistant dengan sesi chat dan riwayat percakapan.
+- Pengaturan threshold, perangkat, WiFi ESP32, dan panduan aplikasi.
 
-## Setup
+## Menjalankan Aplikasi
 
-1. Install dependencies:
 ```bash
 npm install
+npm start
 ```
 
-2. Tambahkan gambar team ke folder `assets/`:
-   - `team1.jpg` - Anggota tim 1
-   - `team2.jpg` - Anggota tim 2
-   - `team3.jpg` - Anggota tim 3
-   - `team4.jpg` - Anggota tim 4
+## Build
 
-3. Pastikan file `logo.png` ada di folder `assets/`
-
-4. Jalankan aplikasi:
 ```bash
-npx expo start
+npm run build
 ```
 
-## Struktur File
+## Struktur Utama
 
-### Komponen
-- `App.js` - Main app dengan routing
-- `components/SplashScreen.js` - Splash screen dengan animasi
-- `components/Dashboard.js` - Dashboard monitoring parameter air
-- `components/AboutUs.js` - Halaman About Us dengan carousel tim
-- `components/StatusCard.js` - Card status kualitas air
-- `components/WaterQualityCard.js` - Card parameter individual
-- `components/HistoryModal.js` - Modal untuk menampilkan riwayat data
+- `App.js`: routing utama aplikasi.
+- `components/Dashboard.js`: dashboard monitoring.
+- `components/HistoryModal.js`: riwayat, filter, dan export CSV.
+- `components/MeasurementScreen.js`: start/stop sesi pengukuran.
+- `components/AIAssistant.js`: halaman chat AI.
+- `components/QuickTour.js`: panduan aplikasi.
+- `services/api.js`: koneksi API backend.
+- `styles/`: styling komponen.
+- `constants/colors.js`: palet warna aplikasi.
 
-### Data
-- `data/teamMembers.js` - Data anggota tim (nama, NIM)
+## Catatan Data
 
-### Styles (StyleSheet terpisah)
-- `styles/dashboardStyles.js` - Styles untuk Dashboard
-- `styles/aboutUsStyles.js` - Styles untuk About Us
-- `styles/statusCardStyles.js` - Styles untuk Status Card
-- `styles/waterQualityCardStyles.js` - Styles untuk Water Quality Card
-- `styles/historyModalStyles.js` - Styles untuk History Modal
-- `styles/splashScreenStyles.js` - Styles untuk Splash Screen
-
-### Constants
-- `constants/colors.js` - Color palette dan gradients UniFlow
-
-## Navigasi
-
-- Dashboard: Icon person di kanan atas → About Us
-- About Us: Tombol "Kembali" di kiri atas → Dashboard
-- Carousel About Us: Swipe horizontal untuk melihat 4 anggota tim
-- Klik pada card parameter → Buka History Modal
-- Klik pada StatusCard → Buka Overall Quality History
-
-## Data Structure
-
-### Team Members
-Setiap anggota tim memiliki:
-- `id`: ID unik
-- `name`: Nama lengkap
-- `role`: Role/jabatan (tidak digunakan di UI)
-- `nim`: Nomor Induk Mahasiswa
-- `image`: Path ke gambar
-
-### Water Quality Parameters
-Setiap parameter memiliki:
-- `id`: ID unik
-- `title`: Nama parameter
-- `value`: Nilai saat ini
-- `unit`: Satuan
-- `status`: 'good' | 'warning' | 'danger'
-- `iconName`: Nama icon dari Ionicons
-- `range`: Rentang nilai
-- `accuracy`: Akurasi sensor
-- `color`: Array warna untuk gradient
-- `history`: Array data historis
-
-### History Entry
-Setiap entry history memiliki:
-- `timestamp`: Tanggal dan waktu
-- `value`: Nilai pengukuran
-- `unit`: Satuan
-- `status`: Status kualitas
-
-## Standar
-
-Sesuai dengan PERMENKES RI No. 32 Tahun 2017 tentang Standar Baku Mutu Kesehatan Lingkungan dan Persyaratan Kesehatan Air.
-
-## Update Data Tim
-
-Edit file `data/teamMembers.js` untuk mengubah data anggota tim:
-```javascript
-{
-  id: 1,
-  name: 'Nama Lengkap',
-  role: 'Jabatan', // tidak ditampilkan
-  nim: '123456789',
-  image: require('../assets/team1.jpg'),
-}
-```
-=======
-# waterquality-fe
->>>>>>> c591669e7259ec408239467b81df9247ccaa7e6a
+Riwayat yang tampil di aplikasi dibatasi maksimal 100 data terakhir agar UI tetap ringan. Gunakan tombol download CSV untuk mengambil seluruh data dari backend, termasuk seluruh data yang cocok dengan filter lokasi atau rentang waktu.

@@ -152,11 +152,6 @@ export default function MeasurementScreen({ onBack }) {
               {activeMeasurement ? `Aktif · ${activeMeasurement.location || ''}` : 'Tidak ada sesi aktif'}
             </Text>
           </View>
-          {activeMeasurement && (
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 10, padding: 8 }}>
-              <Ionicons name="stopwatch-outline" size={22} color="#fff" />
-            </View>
-          )}
         </View>
       </LinearGradient>
 

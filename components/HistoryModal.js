@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  Share, Alert, TextInput,
+  Share, Alert, TextInput, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,7 +10,7 @@ import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { exportSensorCSV } from '../services/api';
+import { exportSensorCSV, getAllSensors } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -28,6 +28,47 @@ const toWibDate = (value) => {
   if (value instanceof Date) return value;
   const utc = new Date(value);
   return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
+};
+
+const HISTORY_FIELD = {
+  0: { field: 'wqi_score', unit: 'Skor' },
+  1: { field: 'ph', unit: 'pH' },
+  2: { field: 'temperature', unit: '°C' },
+  3: { field: 'tds', unit: 'ppm' },
+  4: { field: 'turbidity', unit: 'NTU' },
+};
+
+const getBackendStatus = (item, dataId) => {
+  if (dataId === 0) {
+    const status = String(item.wqi_status || '').toLowerCase();
+    if (status === 'buruk' || status === 'danger') return 'danger';
+    if (status === 'sedang' || status === 'warning') return 'warning';
+    return 'good';
+  }
+
+  return item.status || item.sensor_status || 'good';
+};
+
+const mapSensorsToHistory = (rows, dataId) => {
+  const meta = HISTORY_FIELD[dataId];
+  if (!meta) return [];
+
+  return (rows || [])
+    .filter((item) => item?.[meta.field] != null)
+    .map((item) => {
+      const rawValue = Number(item[meta.field]);
+      const value = Number.isFinite(rawValue)
+        ? rawValue.toFixed(meta.field === 'tds' || meta.field === 'wqi_score' ? 0 : 1)
+        : String(item[meta.field]);
+
+      return {
+        timestamp: toWibDate(item.created_at),
+        value,
+        unit: meta.unit,
+        status: getBackendStatus(item, dataId),
+        location: item.session_location || item.location || null,
+      };
+    });
 };
 
 const Sparkline = ({ data, color = '#7CB9D8', width = 120, height = 36 }) => {
@@ -509,8 +550,6 @@ export default function HistoryModal({
   visible,
   onClose,
   data,
-  activeMeasurement,
-  measurementsList = [],
   allZones = [],
 }) {
   const { title, color, history = [] } = data;
@@ -528,6 +567,8 @@ export default function HistoryModal({
 
   // ── Quick zone filter langsung dari header list (tanpa buka modal) ──
   const [quickZone, setQuickZone] = useState(null);
+  const [displayHistory, setDisplayHistory] = useState(history);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const statusConfig = {
     good: { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
@@ -546,19 +587,59 @@ export default function HistoryModal({
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
 
+  const buildSensorQueryParams = useCallback(() => {
+    const pad = (n) => String(n).padStart(2, '0');
+    const params = { limit: 100 };
+    const zone = activeFilter.zone || quickZone;
+
+    if (zone) {
+      params.zone = zone;
+    }
+
+    if (activeFilter.startDate) {
+      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
+      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+      const ed = endDate || startDate;
+      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+    }
+
+    return params;
+  }, [activeFilter, quickZone]);
+
+  const loadFilteredHistory = useCallback(async () => {
+    const hasBackendFilter = !!activeFilter.startDate || !!activeFilter.zone || !!quickZone;
+
+    if (!hasBackendFilter) {
+      setDisplayHistory(history);
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const res = await getAllSensors(buildSensorQueryParams());
+      setDisplayHistory(mapSensorsToHistory(res.data || [], data.id));
+    } catch (err) {
+      logError('HistoryModal.loadFilteredHistory', err);
+      Alert.alert('Gagal Memuat Filter', 'Tidak dapat mengambil data filter dari backend.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [activeFilter, quickZone, history, data.id, buildSensorQueryParams]);
+
+  useEffect(() => {
+    loadFilteredHistory();
+  }, [loadFilteredHistory]);
+
   // Semua zona unik dari history dan daftar lokasi device yang pernah di-set
   const zones = useMemo(() => {
-    const fromHistory = history.map((h) => h.location).filter(Boolean);
+    const fromHistory = displayHistory.map((h) => h.location).filter(Boolean);
     return [...new Set([...fromHistory, ...allZones])].sort();
-  }, [history, allZones]);
-
-  // Apakah ada data multi-zona
-  const isMultiZone = zones.length > 1;
+  }, [displayHistory, allZones]);
 
   // Filter utama dari CalendarFilterModal
   const filteredByModal = useMemo(() => {
     const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
-    let result = history;
+    let result = displayHistory;
 
     if (startDate) {
       const start = new Date(startDate.year, startDate.month, startDate.day, startHour, 0, 0);
@@ -577,7 +658,7 @@ export default function HistoryModal({
     }
 
     return result;
-  }, [history, activeFilter]);
+  }, [displayHistory, activeFilter]);
 
   // Filter tambahan: quick zone pill di bawah header list
   const filteredHistory = useMemo(() => {
@@ -804,7 +885,6 @@ export default function HistoryModal({
     setQuickZone(null);
   };
 
-  const activeQuickZoneOrModal = quickZone || activeFilter.zone;
   const showingZoneLabel = quickZone || activeFilter.zone;
 
   return (
@@ -948,6 +1028,26 @@ export default function HistoryModal({
         )}
 
         {/* ── List ── */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          backgroundColor: '#F8FBFF',
+          borderBottomWidth: 1,
+          borderBottomColor: '#EAF4FB',
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+        }}>
+          {historyLoading ? (
+            <ActivityIndicator size="small" color="#5AA3C8" />
+          ) : (
+            <Ionicons name="information-circle-outline" size={15} color="#5AA3C8" />
+          )}
+          <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: '#5F7F91' }}>
+            Menampilkan maksimal 100 data terakhir sesuai filter. Download CSV untuk mengambil seluruh data dari backend.
+          </Text>
+        </View>
+
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <View style={styles.listWrap}>
             {filteredHistory.length === 0 ? (
