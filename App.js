@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import AboutUs from './components/AboutUs';
 import AIAssistant from './components/AIAssistant';
 import WiFiManager from './components/WifiManager';
+import MeasurementScreen from './components/MeasurementScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 
 const SPLASH_DURATION_MS = 3000;
@@ -19,11 +20,13 @@ const SCREENS = {
       onNavigateToAbout={() => nav('about')}
       onNavigateToAI={() => nav('ai-assistant')}
       onNavigateToWifi={() => nav('wifi-manager')}
+      onNavigateToMeasurement={() => nav('measurement')}
     />
   ),
   about: (nav) => <AboutUs onBack={() => nav('dashboard')} />,
   'ai-assistant': (nav) => <AIAssistant onBack={() => nav('dashboard')} />,
   'wifi-manager': (nav) => <WiFiManager onConnected={() => nav('dashboard')} />,
+  measurement: (nav) => <MeasurementScreen onBack={() => nav('dashboard')} />,
 };
 
 export default function App() {

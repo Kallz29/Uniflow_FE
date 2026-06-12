@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  Share, Alert,
+  Share, Alert, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,6 +10,7 @@ import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
+import { exportSensorCSV } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -27,6 +28,58 @@ const toWibDate = (value) => {
   if (value instanceof Date) return value;
   const utc = new Date(value);
   return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
+};
+
+const Sparkline = ({ data, color = '#7CB9D8', width = 120, height = 36 }) => {
+  if (!data || data.length < 2) return null;
+
+  const values = data
+    .slice(0, 20)
+    .map((d) => parseFloat(d.value))
+    .filter((v) => !isNaN(v));
+  if (values.length < 2) return null;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const point = (value, index) => ({
+    x: (index / (values.length - 1)) * width,
+    y: height - ((value - min) / range) * height,
+  });
+
+  return (
+    <View style={{ width, height, position: 'relative', overflow: 'hidden' }}>
+      {values.map((v, i) => {
+        if (i === 0) return null;
+        const p1 = point(values[i - 1], i - 1);
+        const p2 = point(v, i);
+        const lineWidth = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+        return (
+          <View
+            key={i}
+            style={{
+              position: 'absolute',
+              left: (p1.x + p2.x) / 2 - lineWidth / 2,
+              top: (p1.y + p2.y) / 2 - 0.75,
+              width: lineWidth,
+              height: 1.5,
+              backgroundColor: color,
+              borderRadius: 1,
+              transform: [{ rotate: `${angle}deg` }],
+            }}
+          />
+        );
+      })}
+      <View style={{
+        position: 'absolute',
+        left: point(values[values.length - 1], values.length - 1).x - 3,
+        top: point(values[values.length - 1], values.length - 1).y - 3,
+        width: 6, height: 6, borderRadius: 3,
+        backgroundColor: color,
+      }} />
+    </View>
+  );
 };
 
 // ─── Calendar Filter Modal ─────────────────────────────────
@@ -295,48 +348,48 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
               Rentang Jam
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Dari Jam */}
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10, backgroundColor: '#F9FAFB', overflow: 'hidden' }}>
-                  <TouchableOpacity
-                    onPress={() => setStartHour((h) => Math.max(0, h - 1))}
-                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-                  >
-                    <Ionicons name="remove" size={16} color="#5AA3C8" />
-                  </TouchableOpacity>
-                  <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#1A3040' }}>
-                    {String(startHour).padStart(2, '0')}:00
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setStartHour((h) => Math.min(endHour, h + 1))}
-                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-                  >
-                    <Ionicons name="add" size={16} color="#5AA3C8" />
-                  </TouchableOpacity>
-                </View>
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
+                <TextInput
+                  value={String(startHour).padStart(2, '0') + ':00'}
+                  keyboardType="numeric"
+                  maxLength={5}
+                  placeholder="00:00"
+                  placeholderTextColor="#B0CFE0"
+                  onChangeText={(v) => {
+                    const num = parseInt(v.replace(/\D/g, ''), 10);
+                    if (!isNaN(num) && num >= 0 && num <= 23) setStartHour(num);
+                  }}
+                  style={{
+                    borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                    padding: 10, fontSize: 15, fontWeight: '700', color: '#1A3040',
+                    backgroundColor: '#F9FAFB', textAlign: 'center',
+                  }}
+                />
               </View>
 
               <Ionicons name="arrow-forward" size={16} color="#B0CFE0" style={{ marginTop: 16 }} />
 
+              {/* Sampai Jam */}
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10, backgroundColor: '#F9FAFB', overflow: 'hidden' }}>
-                  <TouchableOpacity
-                    onPress={() => setEndHour((h) => Math.max(startHour, h - 1))}
-                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-                  >
-                    <Ionicons name="remove" size={16} color="#5AA3C8" />
-                  </TouchableOpacity>
-                  <Text style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '700', color: '#1A3040' }}>
-                    {String(endHour).padStart(2, '0')}:59
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setEndHour((h) => Math.min(23, h + 1))}
-                    style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-                  >
-                    <Ionicons name="add" size={16} color="#5AA3C8" />
-                  </TouchableOpacity>
-                </View>
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI JAM</Text>
+                <TextInput
+                  value={String(endHour).padStart(2, '0') + ':59'}
+                  keyboardType="numeric"
+                  maxLength={5}
+                  placeholder="23:59"
+                  placeholderTextColor="#B0CFE0"
+                  onChangeText={(v) => {
+                    const num = parseInt(v.replace(/\D/g, ''), 10);
+                    if (!isNaN(num) && num >= 0 && num <= 23) setEndHour(num);
+                  }}
+                  style={{
+                    borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                    padding: 10, fontSize: 15, fontWeight: '700', color: '#1A3040',
+                    backgroundColor: '#F9FAFB', textAlign: 'center',
+                  }}
+                />
               </View>
             </View>
 
@@ -659,30 +712,47 @@ export default function HistoryModal({
   // ─── Export CSV ─────────────────────────────────────────
   const handleExport = async () => {
     try {
-      if (filteredHistory.length === 0) {
-        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
+      const pad = (n) => String(n).padStart(2, '0');
+      const now = new Date();
+      const dateStr = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      const zoneStr = (activeFilter.zone || quickZone || 'semua').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      const fileName = `uniflow_${safeName}_${dateStr}_${zoneStr}.csv`;
+      const hasFilter = !!activeFilter.startDate || !!activeFilter.zone || !!quickZone;
+
+      if (hasFilter && filteredHistory.length === 0) {
+        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk filter ini.');
         return;
       }
 
-      const csvContent = buildCSVWithSession(filteredHistory);
-      const fileName = buildExportFileName();
-      const fileUri = FileSystem.documentDirectory + fileName;
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-      const isAvailable = await Sharing.isAvailableAsync();
+      const params = {};
+      if (hasFilter) {
+        if (activeFilter.zone || quickZone) {
+          params.zone = activeFilter.zone || quickZone;
+        }
+        if (activeFilter.startDate) {
+          const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
+          params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+          const ed = endDate || startDate;
+          params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+        }
+      } else {
+        params.days = 90;
+      }
 
+      const url = exportSensorCSV(params);
+      const fileUri = FileSystem.documentDirectory + fileName;
+      const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+
+      const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
-        await Sharing.shareAsync(fileUri, {
+        await Sharing.shareAsync(downloadRes.uri, {
           mimeType: 'text/csv',
-          dialogTitle: `Export ${title}`,
+          dialogTitle: hasFilter ? `Export ${title}` : `Export Semua Data ${title}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
-        await Share.share({
-          message: csvContent,
-          title: fileName,
-        });
+        await Share.share({ message: url, title: fileName });
       }
     } catch (err) {
       logError('HistoryModal.export', err);
@@ -748,6 +818,16 @@ export default function HistoryModal({
                   ? ` · ${[filterLabel(), quickZone].filter(Boolean).join(' · ')}`
                   : ' · 3 bulan terakhir'}
               </Text>
+              {filteredHistory.length > 1 && (
+                <View style={{ marginTop: 8, opacity: 0.85 }}>
+                  <Sparkline
+                    data={[...filteredHistory].reverse().slice(0, 24)}
+                    color="rgba(255,255,255,0.9)"
+                    width={160}
+                    height={32}
+                  />
+                </View>
+              )}
             </View>
 
             <View style={styles.headerBtns}>

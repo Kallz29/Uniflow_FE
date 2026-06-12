@@ -35,17 +35,17 @@ export const getLatestSensor = () =>
 
 /** GET /api/sensors?limit=N&start=S&end=E&zone=Z */
 export const getAllSensors = (params = {}) => {
-  const queryParams = typeof params === 'number'
-    ? { limit: params }
-    : {
-      limit: params.limit,
-      start: params.start,
-      end: params.end,
-      zone: params.zone,
-    };
-  const query = buildQueryString(queryParams);
+  if (typeof params === 'number') {
+    return apiClient.get(`/sensors?limit=${encodeURIComponent(params)}`, { tag: 'getAllSensors' });
+  }
 
-  return apiClient.get(`/sensors${query ? `?${query}` : ''}`, { tag: 'getAllSensors' });
+  const query = new URLSearchParams();
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  if (params.zone) query.set('zone', params.zone);
+
+  return apiClient.get(`/sensors?${query.toString()}`, { tag: 'getAllSensors' });
 };
 
 /** GET /api/sensors/stats */

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, ScrollView, Image, TouchableOpacity,
   ActivityIndicator, RefreshControl, Modal, Dimensions,
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import StatusCard from './StatusCard';
 import HistoryModal from './HistoryModal';
+import QuickTour, { useShouldShowTour } from './QuickTour';
 import {
   getAllSensors, getLatestSensor, getSensorStats,
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
@@ -122,19 +123,30 @@ const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
 
 // ─── Parameter Card ────────────────────────────────────────
-const ParamCard = ({ item, onPress }) => (
+const ParamCard = ({ item, onPress, isDeviceOffline }) => (
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={0.88}
     style={[styles.paramCard, { width: CARD_W }]}
   >
     <LinearGradient
-      colors={item.colors}
+      colors={isDeviceOffline ? ['#94A3B8', '#64748B'] : item.colors}
       style={styles.paramCardTop}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <View style={[styles.paramCardStatusDot, { backgroundColor: STATUS_DOT[item.status] }]} />
+      {isDeviceOffline && (
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 3,
+          alignItems: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12,
+        }}>
+          <Text style={{ fontSize: 9, color: '#FCD34D', fontWeight: '700', letterSpacing: 0.5 }}>
+            DEVICE OFFLINE
+          </Text>
+        </View>
+      )}
+      <View style={[styles.paramCardStatusDot, { backgroundColor: isDeviceOffline ? '#FCD34D' : STATUS_DOT[item.status] }]} />
       <View style={styles.paramCardIconWrap}>
         <Ionicons name={item.iconName} size={16} color="rgba(255,255,255,0.9)" />
       </View>
@@ -144,7 +156,7 @@ const ParamCard = ({ item, onPress }) => (
         <Text style={styles.paramCardUnit}>{item.unit}</Text>
       </View>
     </LinearGradient>
-    <View style={[styles.paramCardBottom, { backgroundColor: item.colors[1] + 'CC' }]}>
+    <View style={[styles.paramCardBottom, { backgroundColor: (isDeviceOffline ? '#64748B' : item.colors[1]) + 'CC' }]}>
       <Text style={styles.paramCardRange}>{item.range}</Text>
       <Text style={styles.paramCardAccuracy}>{item.accuracy}</Text>
     </View>
@@ -152,7 +164,7 @@ const ParamCard = ({ item, onPress }) => (
 );
 
 // ─── Dashboard ─────────────────────────────────────────────
-export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigateToWifi }) {
+export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigateToWifi, onNavigateToMeasurement }) {
   // ── Navigation & History ──
   const [selectedParameter, setSelectedParameter] = useState(null);
   const [showOverallHistory, setShowOverallHistory] = useState(false);
@@ -206,19 +218,19 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshToast, setRefreshToast] = useState(null);
+  const [showTour, setShowTour] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
+  const toastTimeout = useRef(null);
+  const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
 
   // ─── Fetch data ──────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-      const pad = (n) => String(n).padStart(2, '0');
-      const startStr = `${threeMonthsAgo.getFullYear()}-${pad(threeMonthsAgo.getMonth() + 1)}-${pad(threeMonthsAgo.getDate())}`;
       const [latestRes, allRes, statsRes, alertsRes, thresholdRes] = await Promise.all([
-        getLatestSensor(), getAllSensors({ limit: 2000, start: startStr }), getSensorStats(),
+        getLatestSensor(), getAllSensors({ limit: 100 }), getSensorStats(),
         getAlerts({ limit: 20 }), getThreshold(),
       ]);
 
@@ -238,6 +250,13 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         setMeasurementsList(sessions);
       } catch (_) {
         // Dashboard tetap bisa tampil meski endpoint measurement gagal.
+      }
+
+      try {
+        const devRes = await getAllDevices();
+        setDevices(devRes.data || []);
+      } catch (_) {
+        // Indikator offline tidak boleh membuat dashboard gagal dimuat.
       }
 
       setQualityData(mapSensorToCards(latest, th));
@@ -297,29 +316,52 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   useEffect(() => {
     fetchData();
     const iv = setInterval(fetchData, DASHBOARD_REFRESH_INTERVAL);
-    return () => clearInterval(iv);
+    return () => {
+      clearInterval(iv);
+      clearTimeout(toastTimeout.current);
+    };
   }, [fetchData]);
 
   useEffect(() => {
-    if (!activeMeasurement) {
+    if (tourChecked && shouldShowTour && !loading) {
+      const t = setTimeout(() => setShowTour(true), 800);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [tourChecked, shouldShowTour, loading]);
+
+  useEffect(() => {
+    if (!activeMeasurement?.start_time) {
       setElapsed(0);
-      return undefined;
+      return;
     }
 
-    const startTime = new Date(activeMeasurement.start_time).getTime();
+    const startMs = new Date(activeMeasurement.start_time).getTime();
     const tick = () => {
-      if (Number.isNaN(startTime)) {
+      if (Number.isNaN(startMs)) {
         setElapsed(0);
         return;
       }
-      setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+      const diff = Math.floor((Date.now() - startMs) / 1000);
+      setElapsed(diff > 0 ? diff : 0);
     };
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, [activeMeasurement]);
+  }, [activeMeasurement?.start_time]);
 
-  const onRefresh = () => { setRefreshing(true); fetchData(); };
+  const showToast = (msg) => {
+    setRefreshToast(msg);
+    clearTimeout(toastTimeout.current);
+    toastTimeout.current = setTimeout(() => setRefreshToast(null), 2500);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    const now = new Date();
+    showToast(`Diperbarui ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} WIB`);
+  };
 
   // Measurement handlers
   const closeMeasurementModal = () => {
@@ -564,6 +606,26 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     cardRows.push(qualityData.slice(i, i + 2));
   }
 
+  const lastSeenMap = useMemo(() => {
+    const map = {};
+    devices.forEach((d) => {
+      if (d.location) map[d.location] = d.last_seen;
+    });
+    return map;
+  }, [devices]);
+
+  const isDeviceOffline = useMemo(() => {
+    if (devices.length === 0) return false;
+    const staleMs = 5 * 60 * 1000;
+    const now = Date.now();
+    return devices.every((d) => {
+      if (d.status === 'inactive') return true;
+      if (!d.last_seen) return true;
+      const lastSeenMs = new Date(d.last_seen).getTime();
+      return Number.isNaN(lastSeenMs) || now - lastSeenMs > staleMs;
+    });
+  }, [devices, lastSeenMap]);
+
   const THRESHOLD_FIELDS = [
     { label: 'pH', minKey: 'ph_min', maxKey: 'ph_max' },
     { label: 'Suhu (°C)', minKey: 'temp_min', maxKey: 'temp_max' },
@@ -611,6 +673,16 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             <TouchableOpacity onPress={onNavigateToAI} style={styles.statusIndicator}>
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
+            {/* Measurement */}
+            <TouchableOpacity onPress={onNavigateToMeasurement} style={styles.statusIndicator}>
+              <Ionicons name="pulse" size={20} color="#FFFFFF" />
+              {activeMeasurement && (
+                <View style={{
+                  position: 'absolute', top: -3, right: -3,
+                  width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E',
+                }} />
+              )}
+            </TouchableOpacity>
             {/* Settings */}
             <TouchableOpacity onPress={openSettingsMenu} style={styles.statusIndicator}>
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
@@ -626,6 +698,19 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           <TouchableOpacity onPress={fetchData}>
             <Text style={styles.errorRetry}>Coba lagi →</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Refresh Toast */}
+      {refreshToast && (
+        <View style={{
+          position: 'absolute', bottom: 24, alignSelf: 'center',
+          backgroundColor: 'rgba(26,48,64,0.88)', borderRadius: 20,
+          paddingHorizontal: 16, paddingVertical: 8,
+          flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 99,
+        }}>
+          <Ionicons name="checkmark-circle" size={14} color="#4ADE80" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>{refreshToast}</Text>
         </View>
       )}
 
@@ -718,6 +803,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   <ParamCard
                     key={item.id}
                     item={item}
+                    isDeviceOffline={isDeviceOffline}
                     onPress={() => setSelectedParameter(item.id)}
                   />
                 ))}
@@ -858,6 +944,33 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>
                     Hubungkan UniFlow ke jaringan WiFi
                   </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />
+              </TouchableOpacity>
+
+              {/* Ulangi Tour */}
+              <TouchableOpacity
+                onPress={async () => {
+                  setShowSettingsMenu(false);
+                  await resetTour();
+                  setTimeout(() => setShowTour(true), 300);
+                }}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  backgroundColor: '#F0F9FF', borderRadius: 16, padding: 16,
+                  borderWidth: 1.5, borderColor: '#D1E8F5',
+                }}
+              >
+                <View style={{
+                  width: 46, height: 46, borderRadius: 23, backgroundColor: '#7CB9D8',
+                  justifyContent: 'center', alignItems: 'center', marginRight: 14,
+                }}>
+                  <Ionicons name="help-circle-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A3040' }}>Panduan Aplikasi</Text>
+                  <Text style={{ fontSize: 12, color: '#8BAFC0', marginTop: 2 }}>Ulangi tour fitur UniFlow</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#B0CFE0" />
               </TouchableOpacity>
@@ -1629,6 +1742,11 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           onClose={() => setShowOverallHistory(false)}
         />
       )}
+
+      <QuickTour
+        visible={showTour}
+        onDone={() => setShowTour(false)}
+      />
     </ScrollView>
   );
 }
