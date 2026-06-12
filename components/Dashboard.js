@@ -135,13 +135,21 @@ const ParamCard = ({ item, onPress, deviceStatus }) => (
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <View style={[styles.paramCardStatusDot, { backgroundColor: STATUS_DOT[item.status] }]} />
       <View style={{
         position: 'absolute', top: 10, right: 10,
-        width: 10, height: 10, borderRadius: 5,
-        backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
-        borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.6)',
-      }} />
+        flexDirection: 'row', gap: 4, alignItems: 'center',
+      }}>
+        <View style={{
+          width: 8, height: 8, borderRadius: 4,
+          backgroundColor: STATUS_DOT[item.status],
+          borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+        }} />
+        <View style={{
+          width: 8, height: 8, borderRadius: 4,
+          backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
+          borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
+        }} />
+      </View>
       <View style={styles.paramCardIconWrap}>
         <Ionicons name={item.iconName} size={16} color="rgba(255,255,255,0.9)" />
       </View>
@@ -670,16 +678,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             <TouchableOpacity onPress={onNavigateToAI} style={styles.statusIndicator}>
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
-            {/* Measurement */}
-            <TouchableOpacity onPress={onNavigateToMeasurement} style={styles.statusIndicator}>
-              <Ionicons name="pulse" size={20} color="#FFFFFF" />
-              {activeMeasurement && (
-                <View style={{
-                  position: 'absolute', top: -3, right: -3,
-                  width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E',
-                }} />
-              )}
-            </TouchableOpacity>
             {/* Settings */}
             <TouchableOpacity ref={refSettingBtn} onPress={openSettingsMenu} style={styles.statusIndicator}>
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
@@ -758,8 +756,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           {/* Start / Stop Measurement */}
           <View ref={refStartBtn} style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity
-              onPress={activeMeasurement ? handleStopMeasurement : openMeasurementModal}
-              disabled={measurementLoading}
+              onPress={() => onNavigateToMeasurement?.()}
               activeOpacity={0.85}
               style={{
                 backgroundColor: activeMeasurement ? '#DC2626' : '#5AA3C8',
@@ -767,23 +764,17 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                 flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
               }}
             >
-              {measurementLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={18} color="#fff" />
-                  <View>
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
-                      {activeMeasurement ? 'Stop' : 'Start'}
-                    </Text>
-                    {activeMeasurement && (
-                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
-                        {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi Aktif'}
-                      </Text>
-                    )}
-                  </View>
-                </>
-              )}
+              <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={18} color="#fff" />
+              <View>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
+                  {activeMeasurement ? 'Stop' : 'Start'}
+                </Text>
+                {activeMeasurement && (
+                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
+                    {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi Aktif'}
+                  </Text>
+                )}
+              </View>
             </TouchableOpacity>
           </View>
 

@@ -56,13 +56,15 @@ export const getSensorStats = () =>
 export const getSensorCSVUrl = (days = 90) => buildCsvUrl({ days });
 
 /** GET /api/sensors/export/csv?days=N&zone=Z&start=S&end=E */
-export const exportSensorCSV = (params = {}) =>
-  buildCsvUrl({
-    zone: params.zone,
-    start: params.start,
-    end: params.end,
-    days: params.days,
-  });
+export const exportSensorCSV = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.zone) query.set('zone', params.zone);
+  if (params.start) query.set('start', params.start);
+  if (params.end) query.set('end', params.end);
+  if (params.days) query.set('days', String(params.days));
+  const qs = query.toString();
+  return `${BASE_URL}/sensors/export/csv${qs ? `?${qs}` : ''}`;
+};
 
 // ============================================
 // ALERTS

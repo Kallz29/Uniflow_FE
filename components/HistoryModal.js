@@ -717,47 +717,57 @@ export default function HistoryModal({
       const now = new Date();
       const dateStr = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
       const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-      const zoneStr = (activeFilter.zone || quickZone || 'semua').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      const zoneStr = (activeFilter.zone || quickZone || 'semua')
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .toLowerCase();
       const fileName = `uniflow_${safeName}_${dateStr}_${zoneStr}.csv`;
+
       const hasFilter = !!activeFilter.startDate || !!activeFilter.zone || !!quickZone;
 
-      if (hasFilter && filteredHistory.length === 0) {
-        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk filter ini.');
-        return;
-      }
-
       const params = {};
-      if (hasFilter) {
-        if (activeFilter.zone || quickZone) {
-          params.zone = activeFilter.zone || quickZone;
-        }
-        if (activeFilter.startDate) {
-          const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
-          params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
-          const ed = endDate || startDate;
-          params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
-        }
-      } else {
+      if (activeFilter.zone || quickZone) {
+        params.zone = activeFilter.zone || quickZone;
+      }
+      if (activeFilter.startDate) {
+        const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
+        params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+        const ed = endDate || startDate;
+        params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+      } else if (!hasFilter) {
         params.days = 90;
       }
 
       const url = exportSensorCSV(params);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const csvContent = await response.text();
+
+      if (!csvContent || csvContent.trim().length === 0) {
+        Alert.alert('Tidak Ada Data', 'Backend tidak mengembalikan data untuk filter ini.');
+        return;
+      }
+
       const fileUri = FileSystem.documentDirectory + fileName;
-      const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
-        await Sharing.shareAsync(downloadRes.uri, {
+        await Sharing.shareAsync(fileUri, {
           mimeType: 'text/csv',
-          dialogTitle: hasFilter ? `Export ${title}` : `Export Semua Data ${title}`,
+          dialogTitle: `Export ${title}`,
           UTI: 'public.comma-separated-values-text',
         });
       } else {
-        await Share.share({ message: url, title: fileName });
+        await Share.share({ message: csvContent, title: fileName });
       }
     } catch (err) {
       logError('HistoryModal.export', err);
-      Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
+      Alert.alert('Export Gagal', `Tidak dapat mengekspor data.\n${err.message}`);
     }
   };
 
