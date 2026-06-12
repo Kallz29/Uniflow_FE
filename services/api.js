@@ -40,12 +40,13 @@ export const getAllSensors = (params = {}) => {
   }
 
   const query = new URLSearchParams();
-  if (params.limit) query.set('limit', String(params.limit));
+  if (params.limit != null) query.set('limit', String(params.limit));
   if (params.start) query.set('start', params.start);
   if (params.end) query.set('end', params.end);
   if (params.zone) query.set('zone', params.zone);
 
-  return apiClient.get(`/sensors?${query.toString()}`, { tag: 'getAllSensors' });
+  const qs = query.toString();
+  return apiClient.get(`/sensors${qs ? `?${qs}` : ''}`, { tag: 'getAllSensors' });
 };
 
 /** GET /api/sensors/stats */
@@ -61,7 +62,7 @@ export const exportSensorCSV = (params = {}) => {
   if (params.zone) query.set('zone', params.zone);
   if (params.start) query.set('start', params.start);
   if (params.end) query.set('end', params.end);
-  if (params.days) query.set('days', String(params.days));
+  if (params.days != null) query.set('days', String(params.days));
   const qs = query.toString();
   return `${BASE_URL}/sensors/export/csv${qs ? `?${qs}` : ''}`;
 };

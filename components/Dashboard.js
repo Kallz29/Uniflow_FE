@@ -136,20 +136,17 @@ const ParamCard = ({ item, onPress, deviceStatus }) => (
       end={{ x: 1, y: 1 }}
     >
       <View style={{
+        position: 'absolute', top: 10, left: 10,
+        width: 9, height: 9, borderRadius: 4.5,
+        backgroundColor: STATUS_DOT[item.status],
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)',
+      }} />
+      <View style={{
         position: 'absolute', top: 10, right: 10,
-        flexDirection: 'row', gap: 4, alignItems: 'center',
-      }}>
-        <View style={{
-          width: 8, height: 8, borderRadius: 4,
-          backgroundColor: STATUS_DOT[item.status],
-          borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
-        }} />
-        <View style={{
-          width: 8, height: 8, borderRadius: 4,
-          backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
-          borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)',
-        }} />
-      </View>
+        width: 9, height: 9, borderRadius: 4.5,
+        backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)',
+      }} />
       <View style={styles.paramCardIconWrap}>
         <Ionicons name={item.iconName} size={16} color="rgba(255,255,255,0.9)" />
       </View>
@@ -188,6 +185,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   // ── Device Modal ──
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [devices, setDevices] = useState([]);
+  const [sensorDeviceStatus, setSensorDeviceStatus] = useState('inactive');
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [deviceSaving, setDeviceSaving] = useState(null);
   const [deviceMsg, setDeviceMsg] = useState(null);
@@ -240,7 +238,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     try {
       setError(null);
       const [latestRes, allRes, statsRes, alertsRes, thresholdRes] = await Promise.all([
-        getLatestSensor(), getAllSensors({ limit: 100 }), getSensorStats(),
+        getLatestSensor(), getAllSensors(), getSensorStats(),
         getAlerts({ limit: 20 }), getThreshold(),
       ]);
 
@@ -271,6 +269,15 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       } catch (_) {
         // Indikator offline tidak boleh membuat dashboard gagal dimuat.
       }
+
+      const latestDevice = devicesList.find((device) => (
+        (latest.device_id != null && device.id === latest.device_id)
+        || (latest.device_code && device.device_code === latest.device_code)
+        || (latest.device?.device_code && device.device_code === latest.device.device_code)
+      ));
+      setSensorDeviceStatus(
+        latestDevice?.status || (devicesList.some((d) => d.status === 'active') ? 'active' : 'inactive')
+      );
 
       const zonesFromDevices = devicesList
         .map((d) => d.location)
@@ -789,14 +796,11 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             {cardRows.map((row, rowIdx) => (
               <View key={rowIdx} style={styles.cardRow}>
                 {row.map((item) => {
-                  const deviceStatus = devices.length > 0
-                    ? (devices.some((d) => d.status === 'active') ? 'active' : 'inactive')
-                    : 'inactive';
                   return (
                     <ParamCard
                       key={item.id}
                       item={item}
-                      deviceStatus={deviceStatus}
+                      deviceStatus={sensorDeviceStatus}
                       onPress={() => setSelectedParameter(item.id)}
                     />
                   );

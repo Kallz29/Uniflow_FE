@@ -14,24 +14,16 @@ const PAD = 8;
 const STEPS = [
   {
     id: 'welcome',
-    title: 'Selamat datang di UniFlow! 👋',
+    title: 'Selamat datang di UniFlow!',
     desc: 'Aplikasi monitoring kualitas air real-time kampus Telkom University. Mari kenalan dulu.',
     refKey: null,
     icon: 'water',
     scrollY: 0,
   },
   {
-    id: 'wqi',
-    title: 'Skor WQI',
-    desc: 'Water Quality Index — skor 0–100. Hijau = Baik, Kuning = Sedang, Merah = Buruk. Tap untuk lihat riwayat.',
-    refKey: 'refWQI',
-    icon: 'analytics',
-    scrollY: 0,
-  },
-  {
     id: 'params',
     title: 'Parameter Air',
-    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Dot di pojok kanan = status nilai & koneksi device.',
+    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Dot kiri = status nilai, dot kanan = koneksi device.',
     refKey: 'refParams',
     icon: 'grid',
     scrollY: 120,
@@ -62,15 +54,15 @@ const STEPS = [
   },
   {
     id: 'done',
-    title: 'Siap digunakan! 🎉',
-    desc: 'Tour bisa diulang kapan saja dari Pengaturan → Panduan Aplikasi.',
+    title: 'Siap digunakan!',
+    desc: 'Tour bisa diulang kapan saja dari Pengaturan > Panduan Aplikasi.',
     refKey: null,
     icon: 'checkmark-circle',
     scrollY: 0,
   },
 ];
 
-const Spotlight = ({ highlight }) => {
+const Spotlight = ({ highlight, blinkAnim }) => {
   if (!highlight) {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.72)' }]} />
@@ -107,7 +99,7 @@ const Spotlight = ({ highlight }) => {
         />
       </Svg>
 
-      <View style={{
+      <Animated.View style={{
         position: 'absolute',
         top: top - PAD,
         left: left - PAD,
@@ -115,7 +107,8 @@ const Spotlight = ({ highlight }) => {
         height: height + PAD * 2,
         borderRadius: r,
         borderWidth: 2,
-        borderColor: 'rgba(124,185,216,0.9)',
+        borderColor: 'rgba(124,185,216,0.95)',
+        opacity: blinkAnim,
       }} />
     </View>
   );
@@ -125,6 +118,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
   const [step, setStep] = useState(0);
   const [highlight, setHighlight] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const blinkAnim = useRef(new Animated.Value(1)).current;
 
   const current = STEPS[step];
 
@@ -157,6 +151,20 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     return () => clearTimeout(t);
   }, [step, visible, current.refKey, current.scrollY, fadeAnim, measureStep, scrollRef]);
 
+  useEffect(() => {
+    if (!highlight) return undefined;
+
+    blinkAnim.setValue(1);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkAnim, { toValue: 0.35, duration: 420, useNativeDriver: true }),
+        Animated.timing(blinkAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [highlight, blinkAnim]);
+
   const finish = async () => {
     await AsyncStorage.setItem(TOUR_KEY, 'true');
     setStep(0);
@@ -183,7 +191,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent>
-      <Spotlight highlight={highlight} />
+      <Spotlight highlight={highlight} blinkAnim={blinkAnim} />
 
       <Animated.View style={{
         position: 'absolute',

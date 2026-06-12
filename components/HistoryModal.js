@@ -710,45 +710,46 @@ export default function HistoryModal({
     return `uniflow_${safeName}_${dateStr}_${zoneStr}.csv`;
   };
 
+  const buildBackendExportParams = () => {
+    const pad = (n) => String(n).padStart(2, '0');
+    const params = {};
+
+    if (activeFilter.zone || quickZone) {
+      params.zone = activeFilter.zone || quickZone;
+    }
+
+    if (activeFilter.startDate) {
+      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
+      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+      const ed = endDate || startDate;
+      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+    }
+
+    return params;
+  };
+
+  const fetchBackendCSV = async () => {
+    const url = exportSensorCSV(buildBackendExportParams());
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    const csvContent = await response.text();
+    if (!csvContent || csvContent.trim().length === 0) {
+      Alert.alert('Tidak Ada Data', 'Backend tidak mengembalikan data untuk filter ini.');
+      return null;
+    }
+
+    return csvContent;
+  };
+
   // ─── Export CSV ─────────────────────────────────────────
   const handleExport = async () => {
     try {
-      const pad = (n) => String(n).padStart(2, '0');
-      const now = new Date();
-      const dateStr = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
-      const safeName = title.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
-      const zoneStr = (activeFilter.zone || quickZone || 'semua')
-        .replace(/[^a-zA-Z0-9]/g, '_')
-        .toLowerCase();
-      const fileName = `uniflow_${safeName}_${dateStr}_${zoneStr}.csv`;
-
-      const hasFilter = !!activeFilter.startDate || !!activeFilter.zone || !!quickZone;
-
-      const params = {};
-      if (activeFilter.zone || quickZone) {
-        params.zone = activeFilter.zone || quickZone;
-      }
-      if (activeFilter.startDate) {
-        const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
-        params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
-        const ed = endDate || startDate;
-        params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
-      } else if (!hasFilter) {
-        params.days = 90;
-      }
-
-      const url = exportSensorCSV(params);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
-      const csvContent = await response.text();
-
-      if (!csvContent || csvContent.trim().length === 0) {
-        Alert.alert('Tidak Ada Data', 'Backend tidak mengembalikan data untuk filter ini.');
-        return;
-      }
+      const fileName = buildExportFileName();
+      const csvContent = await fetchBackendCSV();
+      if (!csvContent) return;
 
       const fileUri = FileSystem.documentDirectory + fileName;
       await FileSystem.writeAsStringAsync(fileUri, csvContent, {
@@ -771,15 +772,12 @@ export default function HistoryModal({
     }
   };
 
-  const handleExportWeb = () => {
+  const handleExportWeb = async () => {
     try {
-      if (filteredHistory.length === 0) {
-        Alert.alert('Tidak Ada Data', 'Tidak ada data untuk diekspor.');
-        return;
-      }
-
-      const csvContent = buildCSVWithSession(filteredHistory);
       const fileName = buildExportFileName();
+      const csvContent = await fetchBackendCSV();
+      if (!csvContent) return;
+
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

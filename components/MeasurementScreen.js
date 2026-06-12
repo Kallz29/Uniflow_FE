@@ -12,6 +12,10 @@ import {
 import { toUserMessage, logError } from '../utils/errorHandler';
 
 const REFRESH_INTERVAL = 3000;
+const START_COLOR = '#5AA3C8';
+const START_COLOR_DARK = '#3E8FB8';
+const STOP_COLOR = '#EF4444';
+const STOP_COLOR_DARK = '#DC2626';
 
 const parseWIB = (str) => {
   if (!str) return new Date();
@@ -23,8 +27,7 @@ const formatElapsed = (sec) => {
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   const pad = (n) => String(n).padStart(2, '0');
-  if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
-  return `${pad(m)}:${pad(s)}`;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
 };
 
 const PARAM_META = [
@@ -136,7 +139,10 @@ export default function MeasurementScreen({ onBack }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F0F7FB' }}>
-      <LinearGradient colors={['#2E7CA8', '#1A5E8A']} style={{ paddingTop: 52, paddingBottom: 20, paddingHorizontal: 20 }}>
+      <LinearGradient
+        colors={activeMeasurement ? [STOP_COLOR, STOP_COLOR_DARK] : [START_COLOR, START_COLOR_DARK]}
+        style={{ paddingTop: 52, paddingBottom: 20, paddingHorizontal: 20 }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity onPress={onBack}>
             <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -169,7 +175,7 @@ export default function MeasurementScreen({ onBack }) {
               disabled={actionLoading}
               activeOpacity={0.85}
               style={{
-                backgroundColor: activeMeasurement ? '#DC2626' : '#5AA3C8',
+                backgroundColor: activeMeasurement ? STOP_COLOR_DARK : START_COLOR,
                 borderRadius: 14, paddingVertical: 16,
                 flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
               }}
@@ -227,8 +233,8 @@ export default function MeasurementScreen({ onBack }) {
           {step === 'input_location' && (
             <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: '#D1E8F5' }}>
               <TouchableOpacity onPress={() => setStep('pick_device')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                <Ionicons name="chevron-back" size={16} color="#5AA3C8" />
-                <Text style={{ fontSize: 12, color: '#5AA3C8', fontWeight: '600' }}>Ganti Perangkat</Text>
+                <Ionicons name="chevron-back" size={16} color={START_COLOR} />
+                <Text style={{ fontSize: 12, color: START_COLOR, fontWeight: '600' }}>Ganti Perangkat</Text>
               </TouchableOpacity>
 
               <View style={{ backgroundColor: '#F0F9FF', borderRadius: 10, padding: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -253,7 +259,7 @@ export default function MeasurementScreen({ onBack }) {
                 onPress={handleStart}
                 disabled={actionLoading || !locationInput.trim()}
                 style={{
-                  backgroundColor: locationInput.trim() ? '#5AA3C8' : '#C5DDE8',
+                  backgroundColor: locationInput.trim() ? START_COLOR : '#C5DDE8',
                   borderRadius: 12, paddingVertical: 13,
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
                 }}
