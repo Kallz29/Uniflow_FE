@@ -136,12 +136,6 @@ const ParamCard = ({ item, onPress, deviceStatus }) => (
       end={{ x: 1, y: 1 }}
     >
       <View style={{
-        position: 'absolute', top: 10, left: 10,
-        width: 9, height: 9, borderRadius: 4.5,
-        backgroundColor: STATUS_DOT[item.status],
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)',
-      }} />
-      <View style={{
         position: 'absolute', top: 10, right: 10,
         width: 9, height: 9, borderRadius: 4.5,
         backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
@@ -226,6 +220,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [error, setError] = useState(null);
   const toastTimeout = useRef(null);
   const refWQI = useRef(null);
+  const refStats = useRef(null);
   const refParams = useRef(null);
   const refStartBtn = useRef(null);
   const refNotifBtn = useRef(null);
@@ -238,7 +233,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     try {
       setError(null);
       const [latestRes, allRes, statsRes, alertsRes, thresholdRes] = await Promise.all([
-        getLatestSensor(), getAllSensors(), getSensorStats(),
+        getLatestSensor(), getAllSensors({ limit: 100 }), getSensorStats(),
         getAlerts({ limit: 20 }), getThreshold(),
       ]);
 
@@ -733,7 +728,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           </View>
 
           {stats && (
-            <View style={styles.statsStrip}>
+            <View ref={refStats} style={styles.statsStrip}>
               {[
                 {
                   label: 'Avg pH',
@@ -1746,7 +1741,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       <QuickTour
         visible={showTour}
         onDone={() => setShowTour(false)}
-        refs={{ refWQI, refParams, refStartBtn, refNotifBtn, refSettingBtn }}
+        refs={{ refWQI, refStats, refParams, refStartBtn, refNotifBtn, refSettingBtn }}
         scrollRef={scrollRef}
       />
     </ScrollView>

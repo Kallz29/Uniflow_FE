@@ -14,7 +14,6 @@ import { toUserMessage, logError } from '../utils/errorHandler';
 const REFRESH_INTERVAL = 3000;
 const START_COLOR = '#5AA3C8';
 const START_COLOR_DARK = '#3E8FB8';
-const STOP_COLOR = '#EF4444';
 const STOP_COLOR_DARK = '#DC2626';
 
 const parseWIB = (str) => {
@@ -140,7 +139,7 @@ export default function MeasurementScreen({ onBack }) {
   return (
     <View style={{ flex: 1, backgroundColor: '#F0F7FB' }}>
       <LinearGradient
-        colors={activeMeasurement ? [STOP_COLOR, STOP_COLOR_DARK] : [START_COLOR, START_COLOR_DARK]}
+        colors={[START_COLOR, START_COLOR_DARK]}
         style={{ paddingTop: 52, paddingBottom: 20, paddingHorizontal: 20 }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -154,10 +153,8 @@ export default function MeasurementScreen({ onBack }) {
             </Text>
           </View>
           {activeMeasurement && (
-            <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 }}>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] }}>
-                {formatElapsed(elapsed)}
-              </Text>
+            <View style={{ backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 10, padding: 8 }}>
+              <Ionicons name="stopwatch-outline" size={22} color="#fff" />
             </View>
           )}
         </View>
