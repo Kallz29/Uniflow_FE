@@ -152,7 +152,6 @@ const ParamCard = ({ item, onPress, deviceStatus }) => (
     </LinearGradient>
     <View style={[styles.paramCardBottom, { backgroundColor: item.colors[1] + 'CC' }]}>
       <Text style={styles.paramCardRange}>{item.range}</Text>
-      <Text style={styles.paramCardAccuracy}>{item.accuracy}</Text>
     </View>
   </TouchableOpacity>
 );
@@ -309,7 +308,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
       setOverallData({
         id: 0,
-        title: 'Kualitas Air Overall',
+        title: 'Kualitas Air',
         value: backendScore != null ? String(backendScore) : '-',
         unit: 'Skor',
         status: backendStatus,
@@ -1744,7 +1743,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         onDone={() => setShowTour(false)}
         refs={{ refWQI, refStats, refParams, refStartBtn, refNotifBtn, refAI, refSettingBtn }}
         scrollRef={scrollRef}
-        onNavigateToAI={onNavigateToAI}
       />
     </ScrollView>
   );

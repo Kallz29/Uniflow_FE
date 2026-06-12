@@ -1044,7 +1044,7 @@ export default function HistoryModal({
             <Ionicons name="information-circle-outline" size={15} color="#5AA3C8" />
           )}
           <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: '#5F7F91' }}>
-            Menampilkan maksimal 100 data terakhir sesuai filter. Download CSV untuk mengambil seluruh data dari backend.
+            Menampilkan maksimal 100 data terakhir sesuai filter. Download CSV untuk mengambil seluruh data.
           </Text>
         </View>
 

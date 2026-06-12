@@ -138,7 +138,7 @@ const Spotlight = ({ highlight, blinkAnim }) => {
   );
 };
 
-export default function QuickTour({ visible, onDone, refs = {}, scrollRef, onNavigateToAI }) {
+export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
   const [step, setStep] = useState(0);
   const [highlight, setHighlight] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -196,13 +196,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, onNav
     onDone?.();
   };
 
-  const goNext = async () => {
-    if (current.id === 'ai' && onNavigateToAI) {
-      await finish();
-      onNavigateToAI();
-      return;
-    }
-
+  const goNext = () => {
     if (step < STEPS.length - 1) setStep((s) => s + 1);
     else finish();
   };
@@ -319,10 +313,10 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, onNav
               }}
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                {current.id === 'ai' ? 'Buka AI' : step === STEPS.length - 1 ? 'Mulai Pakai' : 'Lanjut'}
+                {step === STEPS.length - 1 ? 'Mulai Pakai' : 'Lanjut'}
               </Text>
               <Ionicons
-                name={current.id === 'ai' ? 'open-outline' : step === STEPS.length - 1 ? 'checkmark' : 'chevron-forward'}
+                name={step === STEPS.length - 1 ? 'checkmark' : 'chevron-forward'}
                 size={15}
                 color="#fff"
               />
