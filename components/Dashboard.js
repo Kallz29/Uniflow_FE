@@ -5,10 +5,10 @@ import {
   TextInput, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import StatusCard from './StatusCard';
 import HistoryModal from './HistoryModal';
 import QuickTour, { useShouldShowTour } from './QuickTour';
+import ParameterCard from './ParameterCard';
 import {
   getAllSensors, getLatestSensor, getSensorStats,
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
@@ -29,8 +29,6 @@ const getStatus = (value, min, max) => {
   if (n < min + range * 0.1 || n > max - range * 0.1) return 'warning';
   return 'good';
 };
-
-const STATUS_DOT = { good: '#4ADE80', warning: '#FCD34D', danger: '#F87171' };
 
 const mapWQIStatus = (statusStr) => {
   if (!statusStr) return 'good';
@@ -123,39 +121,6 @@ const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
 
 // ─── Parameter Card ────────────────────────────────────────
-const ParamCard = ({ item, onPress, deviceStatus }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    activeOpacity={0.88}
-    style={[styles.paramCard, { width: CARD_W }]}
-  >
-    <LinearGradient
-      colors={item.colors}
-      style={styles.paramCardTop}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <View style={{
-        position: 'absolute', top: 10, right: 10,
-        width: 9, height: 9, borderRadius: 4.5,
-        backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)',
-      }} />
-      <View style={styles.paramCardIconWrap}>
-        <Ionicons name={item.iconName} size={16} color="rgba(255,255,255,0.9)" />
-      </View>
-      <Text style={styles.paramCardLabel}>{item.title}</Text>
-      <View style={styles.paramCardValueRow}>
-        <Text style={styles.paramCardValue}>{item.value}</Text>
-        <Text style={styles.paramCardUnit}>{item.unit}</Text>
-      </View>
-    </LinearGradient>
-    <View style={[styles.paramCardBottom, { backgroundColor: item.colors[1] + 'CC' }]}>
-      <Text style={styles.paramCardRange}>{item.range}</Text>
-    </View>
-  </TouchableOpacity>
-);
-
 // ─── Dashboard ─────────────────────────────────────────────
 export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigateToWifi, onNavigateToMeasurement }) {
   // ── Navigation & History ──
@@ -785,6 +750,16 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               <Text style={styles.sectionTitle}>Parameter Air</Text>
               <Text style={styles.updateTime}>Diperbarui {formatLastUpdated()}</Text>
             </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#4ADE80' }} />
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600' }}>Online</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#F87171' }} />
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600' }}>Offline</Text>
+              </View>
+            </View>
           </View>
 
           <View ref={refParams} style={styles.cardsGrid}>
@@ -792,9 +767,10 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               <View key={rowIdx} style={styles.cardRow}>
                 {row.map((item) => {
                   return (
-                    <ParamCard
+                    <ParameterCard
                       key={item.id}
                       item={item}
+                      width={CARD_W}
                       deviceStatus={sensorDeviceStatus}
                       onPress={() => setSelectedParameter(item.id)}
                     />

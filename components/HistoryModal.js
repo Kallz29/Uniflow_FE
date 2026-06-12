@@ -253,7 +253,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
           <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040' }}>
-                Zona / Lokasi
+                Lokasi
               </Text>
               {zones && zones.length === 0 && (
                 <Text style={{ fontSize: 11, color: '#B0CFE0', fontStyle: 'italic' }}>
@@ -550,6 +550,7 @@ export default function HistoryModal({
   visible,
   onClose,
   data,
+  measurementsList = [],
   allZones = [],
 }) {
   const { title, color, history = [] } = data;
@@ -569,6 +570,7 @@ export default function HistoryModal({
   const [quickZone, setQuickZone] = useState(null);
   const [displayHistory, setDisplayHistory] = useState(history);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
   const statusConfig = {
     good: { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
@@ -611,16 +613,18 @@ export default function HistoryModal({
 
     if (!hasBackendFilter) {
       setDisplayHistory(history);
+      setHistoryError(null);
       return;
     }
 
     setHistoryLoading(true);
+    setHistoryError(null);
     try {
       const res = await getAllSensors(buildSensorQueryParams());
       setDisplayHistory(mapSensorsToHistory(res.data || [], data.id));
     } catch (err) {
       logError('HistoryModal.loadFilteredHistory', err);
-      Alert.alert('Gagal Memuat Filter', 'Tidak dapat mengambil data filter dari backend.');
+      setHistoryError('Tidak dapat mengambil data filter dari backend.');
     } finally {
       setHistoryLoading(false);
     }
@@ -632,9 +636,9 @@ export default function HistoryModal({
 
   // Semua zona unik dari history dan daftar lokasi device yang pernah di-set
   const zones = useMemo(() => {
-    const fromHistory = displayHistory.map((h) => h.location).filter(Boolean);
+    const fromHistory = history.map((h) => h.location).filter(Boolean);
     return [...new Set([...fromHistory, ...allZones])].sort();
-  }, [displayHistory, allZones]);
+  }, [history, allZones]);
 
   // Filter utama dari CalendarFilterModal
   const filteredByModal = useMemo(() => {
@@ -665,12 +669,6 @@ export default function HistoryModal({
     if (!quickZone) return filteredByModal;
     return filteredByModal.filter((entry) => entry.location === quickZone);
   }, [filteredByModal, quickZone]);
-
-  // Zona yang tersedia setelah filter modal (untuk quick zone pills)
-  const zonesAfterModal = useMemo(() => {
-    const set = new Set(filteredByModal.map((h) => h.location).filter(Boolean));
-    return Array.from(set).sort();
-  }, [filteredByModal]);
 
   const getTrend = (index) => {
     if (index === filteredHistory.length - 1) return 'stable';
@@ -980,7 +978,7 @@ export default function HistoryModal({
         </LinearGradient>
 
         {/* ── Quick Zone Filter Pills (tampil di bawah header jika multi-zona) ── */}
-        {zonesAfterModal.length > 1 && (
+        {zones.length > 1 && (
           <View style={{
             backgroundColor: '#F0F9FF',
             borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
@@ -1004,7 +1002,7 @@ export default function HistoryModal({
                   </Text>
                 </TouchableOpacity>
 
-                {zonesAfterModal.map((z) => (
+                {zones.map((z) => (
                   <TouchableOpacity
                     key={z}
                     onPress={() => setQuickZone(quickZone === z ? null : z)}
@@ -1032,20 +1030,29 @@ export default function HistoryModal({
           flexDirection: 'row',
           alignItems: 'center',
           gap: 8,
-          backgroundColor: '#F8FBFF',
+          backgroundColor: historyError ? '#FEF2F2' : '#F8FBFF',
           borderBottomWidth: 1,
-          borderBottomColor: '#EAF4FB',
+          borderBottomColor: historyError ? '#FECACA' : '#EAF4FB',
           paddingHorizontal: 16,
           paddingVertical: 10,
         }}>
           {historyLoading ? (
             <ActivityIndicator size="small" color="#5AA3C8" />
+          ) : historyError ? (
+            <Ionicons name="warning-outline" size={15} color="#DC2626" />
           ) : (
             <Ionicons name="information-circle-outline" size={15} color="#5AA3C8" />
           )}
-          <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: '#5F7F91' }}>
-            Menampilkan maksimal 100 data terakhir sesuai filter. Download CSV untuk mengambil seluruh data.
+          <Text style={{ flex: 1, fontSize: 11, lineHeight: 16, color: historyError ? '#991B1B' : '#5F7F91' }}>
+            {historyLoading
+              ? 'Memuat 100 data terakhir sesuai filter...'
+              : historyError || 'Menampilkan maksimal 100 data terakhir sesuai filter. Download CSV untuk mengambil seluruh data.'}
           </Text>
+          {historyError && (
+            <TouchableOpacity onPress={loadFilteredHistory}>
+              <Text style={{ fontSize: 11, color: '#DC2626', fontWeight: '700' }}>Coba lagi</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>

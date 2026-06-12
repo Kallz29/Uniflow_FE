@@ -97,6 +97,10 @@ export default function MeasurementScreen({ onBack }) {
       Alert.alert('Perangkat belum dipilih', 'Pilih perangkat dulu.');
       return;
     }
+    if (selectedDevice.status !== 'active') {
+      Alert.alert('Perangkat offline', 'Sesi hanya bisa dimulai dari perangkat yang online.');
+      return;
+    }
 
     setActionLoading(true);
     try {
@@ -194,6 +198,7 @@ export default function MeasurementScreen({ onBack }) {
               {devices.map((d) => (
                 <TouchableOpacity
                   key={d.id}
+                  disabled={d.status !== 'active'}
                   onPress={() => {
                     setSelectedDevice(d);
                     setLocationInput(d.location || '');
@@ -201,8 +206,10 @@ export default function MeasurementScreen({ onBack }) {
                   }}
                   style={{
                     flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: '#F0F9FF', borderRadius: 12, padding: 12, marginBottom: 8,
-                    borderWidth: 1.5, borderColor: '#D1E8F5',
+                    backgroundColor: d.status === 'active' ? '#F0F9FF' : '#F8FAFC',
+                    borderRadius: 12, padding: 12, marginBottom: 8,
+                    borderWidth: 1.5, borderColor: d.status === 'active' ? '#D1E8F5' : '#E5E7EB',
+                    opacity: d.status === 'active' ? 1 : 0.68,
                   }}
                 >
                   <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#3E8FB8', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
@@ -210,7 +217,9 @@ export default function MeasurementScreen({ onBack }) {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>{d.device_code}</Text>
-                    <Text style={{ fontSize: 11, color: '#8BAFC0' }}>{d.location || 'Lokasi belum diatur'}</Text>
+                    <Text style={{ fontSize: 11, color: '#8BAFC0' }}>
+                      {d.status === 'active' ? (d.location || 'Lokasi belum diatur') : 'Perangkat offline'}
+                    </Text>
                   </View>
                   <View style={{ backgroundColor: d.status === 'active' ? '#D1FAE5' : '#FEE2E2', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
                     <Text style={{ fontSize: 10, fontWeight: '700', color: d.status === 'active' ? '#065F46' : '#991B1B' }}>
