@@ -123,30 +123,25 @@ const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
 
 // ─── Parameter Card ────────────────────────────────────────
-const ParamCard = ({ item, onPress, isDeviceOffline }) => (
+const ParamCard = ({ item, onPress, deviceStatus }) => (
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={0.88}
     style={[styles.paramCard, { width: CARD_W }]}
   >
     <LinearGradient
-      colors={isDeviceOffline ? ['#94A3B8', '#64748B'] : item.colors}
+      colors={item.colors}
       style={styles.paramCardTop}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      {isDeviceOffline && (
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          backgroundColor: 'rgba(0,0,0,0.35)', paddingVertical: 3,
-          alignItems: 'center', borderTopLeftRadius: 12, borderTopRightRadius: 12,
-        }}>
-          <Text style={{ fontSize: 9, color: '#FCD34D', fontWeight: '700', letterSpacing: 0.5 }}>
-            DEVICE OFFLINE
-          </Text>
-        </View>
-      )}
-      <View style={[styles.paramCardStatusDot, { backgroundColor: isDeviceOffline ? '#FCD34D' : STATUS_DOT[item.status] }]} />
+      <View style={[styles.paramCardStatusDot, { backgroundColor: STATUS_DOT[item.status] }]} />
+      <View style={{
+        position: 'absolute', top: 10, right: 10,
+        width: 10, height: 10, borderRadius: 5,
+        backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
+        borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.6)',
+      }} />
       <View style={styles.paramCardIconWrap}>
         <Ionicons name={item.iconName} size={16} color="rgba(255,255,255,0.9)" />
       </View>
@@ -156,7 +151,7 @@ const ParamCard = ({ item, onPress, isDeviceOffline }) => (
         <Text style={styles.paramCardUnit}>{item.unit}</Text>
       </View>
     </LinearGradient>
-    <View style={[styles.paramCardBottom, { backgroundColor: (isDeviceOffline ? '#64748B' : item.colors[1]) + 'CC' }]}>
+    <View style={[styles.paramCardBottom, { backgroundColor: item.colors[1] + 'CC' }]}>
       <Text style={styles.paramCardRange}>{item.range}</Text>
       <Text style={styles.paramCardAccuracy}>{item.accuracy}</Text>
     </View>
@@ -200,6 +195,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [qualityData, setQualityData] = useState([]);
   const [overallData, setOverallData] = useState(null);
   const [historyList, setHistoryList] = useState([]);
+  const [allZones, setAllZones] = useState([]);
   const [stats, setStats] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -223,6 +219,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
   const toastTimeout = useRef(null);
+  const refWQI = useRef(null);
+  const refParams = useRef(null);
+  const refStartBtn = useRef(null);
+  const refNotifBtn = useRef(null);
+  const refSettingBtn = useRef(null);
+  const scrollRef = useRef(null);
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
 
   // ─── Fetch data ──────────────────────────────────────────
@@ -239,25 +241,39 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       const statsData = statsRes.data || {};
       const alertList = alertsRes.data || [];
       const th = thresholdRes.data || {};
+      let devicesList = [];
+      let measurementSessions = [];
 
       setThreshold(th);
 
       try {
         const measRes = await getMeasurements();
-        const sessions = measRes.data || [];
-        const active = sessions.find((s) => s.status === 'active') || null;
+        measurementSessions = measRes.data || [];
+        const active = measurementSessions.find((s) => s.status === 'active') || null;
         setActiveMeasurement(active);
-        setMeasurementsList(sessions);
+        setMeasurementsList(measurementSessions);
       } catch (_) {
         // Dashboard tetap bisa tampil meski endpoint measurement gagal.
       }
 
       try {
         const devRes = await getAllDevices();
-        setDevices(devRes.data || []);
+        devicesList = devRes.data || [];
+        setDevices(devicesList);
       } catch (_) {
         // Indikator offline tidak boleh membuat dashboard gagal dimuat.
       }
+
+      const zonesFromDevices = devicesList
+        .map((d) => d.location)
+        .filter(Boolean);
+      const zonesFromHistory = list
+        .map((item) => item.session_location || item.location)
+        .filter(Boolean);
+      const zonesFromMeasurements = measurementSessions
+        .map((item) => item.location)
+        .filter(Boolean);
+      setAllZones([...new Set([...zonesFromDevices, ...zonesFromHistory, ...zonesFromMeasurements])].sort());
 
       setQualityData(mapSensorToCards(latest, th));
       setHistoryList(list);
@@ -606,26 +622,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     cardRows.push(qualityData.slice(i, i + 2));
   }
 
-  const lastSeenMap = useMemo(() => {
-    const map = {};
-    devices.forEach((d) => {
-      if (d.location) map[d.location] = d.last_seen;
-    });
-    return map;
-  }, [devices]);
-
-  const isDeviceOffline = useMemo(() => {
-    if (devices.length === 0) return false;
-    const staleMs = 5 * 60 * 1000;
-    const now = Date.now();
-    return devices.every((d) => {
-      if (d.status === 'inactive') return true;
-      if (!d.last_seen) return true;
-      const lastSeenMs = new Date(d.last_seen).getTime();
-      return Number.isNaN(lastSeenMs) || now - lastSeenMs > staleMs;
-    });
-  }, [devices, lastSeenMap]);
-
   const THRESHOLD_FIELDS = [
     { label: 'pH', minKey: 'ph_min', maxKey: 'ph_max' },
     { label: 'Suhu (°C)', minKey: 'temp_min', maxKey: 'temp_max' },
@@ -635,6 +631,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.container}
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7CB9D8" />}
@@ -651,7 +648,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           </View>
           <View style={styles.headerIcons}>
             {/* Notifications */}
-            <TouchableOpacity onPress={() => setShowAlertsModal(true)} style={styles.statusIndicator}>
+            <TouchableOpacity ref={refNotifBtn} onPress={() => setShowAlertsModal(true)} style={styles.statusIndicator}>
               <Ionicons name="notifications" size={20} color="#FFFFFF" />
               {unreadCount > 0 && (
                 <View style={{
@@ -684,7 +681,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               )}
             </TouchableOpacity>
             {/* Settings */}
-            <TouchableOpacity onPress={openSettingsMenu} style={styles.statusIndicator}>
+            <TouchableOpacity ref={refSettingBtn} onPress={openSettingsMenu} style={styles.statusIndicator}>
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -721,11 +718,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         </View>
       ) : (
         <>
-          <View style={styles.statusSection}>
+          <View ref={refWQI} style={styles.statusSection}>
             <StatusCard
               onHistoryClick={() => setShowOverallHistory(true)}
               wqiScore={overallData?.value}
               wqiStatus={overallData?.status}
+              deviceStatus={devices.some((d) => d.status === 'active') ? 'active' : 'inactive'}
             />
           </View>
 
@@ -758,13 +756,13 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           )}
 
           {/* Start / Stop Measurement */}
-          <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          <View ref={refStartBtn} style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity
               onPress={activeMeasurement ? handleStopMeasurement : openMeasurementModal}
               disabled={measurementLoading}
               activeOpacity={0.85}
               style={{
-                backgroundColor: activeMeasurement ? '#DC2626' : '#16A34A',
+                backgroundColor: activeMeasurement ? '#DC2626' : '#5AA3C8',
                 borderRadius: 12, paddingVertical: 13,
                 flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
               }}
@@ -796,17 +794,22 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             </View>
           </View>
 
-          <View style={styles.cardsGrid}>
+          <View ref={refParams} style={styles.cardsGrid}>
             {cardRows.map((row, rowIdx) => (
               <View key={rowIdx} style={styles.cardRow}>
-                {row.map((item) => (
-                  <ParamCard
-                    key={item.id}
-                    item={item}
-                    isDeviceOffline={isDeviceOffline}
-                    onPress={() => setSelectedParameter(item.id)}
-                  />
-                ))}
+                {row.map((item) => {
+                  const deviceStatus = devices.length > 0
+                    ? (devices.some((d) => d.status === 'active') ? 'active' : 'inactive')
+                    : 'inactive';
+                  return (
+                    <ParamCard
+                      key={item.id}
+                      item={item}
+                      deviceStatus={deviceStatus}
+                      onPress={() => setSelectedParameter(item.id)}
+                    />
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -1648,7 +1651,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   disabled={measurementLoading || !measurementLocation.trim()}
                   activeOpacity={0.85}
                   style={{
-                    backgroundColor: measurementLocation.trim() ? '#22C55E' : '#C5DDE8',
+                    backgroundColor: measurementLocation.trim() ? '#5AA3C8' : '#C5DDE8',
                     borderRadius: 12, paddingVertical: 13,
                     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
                   }}
@@ -1730,6 +1733,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           data={selectedDataWithHistory}
           activeMeasurement={activeMeasurement}
           measurementsList={measurementsList}
+          allZones={allZones}
           onClose={() => setSelectedParameter(null)}
         />
       )}
@@ -1739,6 +1743,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           data={overallData}
           activeMeasurement={activeMeasurement}
           measurementsList={measurementsList}
+          allZones={allZones}
           onClose={() => setShowOverallHistory(false)}
         />
       )}
@@ -1746,6 +1751,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       <QuickTour
         visible={showTour}
         onDone={() => setShowTour(false)}
+        refs={{ refWQI, refParams, refStartBtn, refNotifBtn, refSettingBtn }}
+        scrollRef={scrollRef}
       />
     </ScrollView>
   );

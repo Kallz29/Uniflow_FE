@@ -169,7 +169,7 @@ export default function MeasurementScreen({ onBack }) {
               disabled={actionLoading}
               activeOpacity={0.85}
               style={{
-                backgroundColor: activeMeasurement ? '#DC2626' : '#16A34A',
+                backgroundColor: activeMeasurement ? '#DC2626' : '#5AA3C8',
                 borderRadius: 14, paddingVertical: 16,
                 flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
               }}
@@ -253,7 +253,7 @@ export default function MeasurementScreen({ onBack }) {
                 onPress={handleStart}
                 disabled={actionLoading || !locationInput.trim()}
                 style={{
-                  backgroundColor: locationInput.trim() ? '#16A34A' : '#C5DDE8',
+                  backgroundColor: locationInput.trim() ? '#5AA3C8' : '#C5DDE8',
                   borderRadius: 12, paddingVertical: 13,
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
                 }}

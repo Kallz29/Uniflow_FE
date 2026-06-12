@@ -511,6 +511,7 @@ export default function HistoryModal({
   data,
   activeMeasurement,
   measurementsList = [],
+  allZones = [],
 }) {
   const { title, color, history = [] } = data;
 
@@ -545,11 +546,11 @@ export default function HistoryModal({
     return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${timeStr}`;
   };
 
-  // Semua zona unik dari history
+  // Semua zona unik dari history dan daftar lokasi device yang pernah di-set
   const zones = useMemo(() => {
-    const set = new Set(history.map((h) => h.location).filter(Boolean));
-    return Array.from(set).sort();
-  }, [history]);
+    const fromHistory = history.map((h) => h.location).filter(Boolean);
+    return [...new Set([...fromHistory, ...allZones])].sort();
+  }, [history, allZones]);
 
   // Apakah ada data multi-zona
   const isMultiZone = zones.length > 1;

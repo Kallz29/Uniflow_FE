@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, Modal,
   Animated, Dimensions, StyleSheet,
@@ -6,219 +6,214 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width: SW } = Dimensions.get('window');
+const { height: SH } = Dimensions.get('window');
 const TOUR_KEY = 'uniflow_tour_done';
 
 const STEPS = [
   {
     id: 'welcome',
     title: 'Selamat datang di UniFlow!',
-    desc: 'Aplikasi monitoring kualitas air real-time untuk kampus Telkom University. Mari kenalan dulu dengan fitur-fiturnya.',
-    highlight: null,
+    desc: 'Aplikasi monitoring kualitas air real-time kampus Telkom University. Mari kenalan dulu dengan fitur-fiturnya.',
+    refKey: null,
     icon: 'water',
+    scrollY: 0,
   },
   {
     id: 'wqi',
     title: 'Skor WQI',
-    desc: 'Water Quality Index - skor 0-100 kualitas air keseluruhan. Hijau = Baik, Kuning = Sedang, Merah = Buruk.',
-    highlight: { top: 160, left: 16, width: SW - 32, height: 90 },
-    arrowDir: 'up',
+    desc: 'Water Quality Index - skor 0-100. Hijau = Baik, Kuning = Sedang, Merah = Buruk. Tap untuk lihat riwayat.',
+    refKey: 'refWQI',
     icon: 'analytics',
+    scrollY: 0,
   },
   {
     id: 'params',
     title: 'Parameter Air',
-    desc: 'Tap kartu untuk lihat riwayat historis per parameter. Dot warna di pojok kiri atas menunjukkan status saat ini.',
-    highlight: { top: 310, left: 16, width: SW - 32, height: 180 },
-    arrowDir: 'up',
+    desc: 'Tap kartu untuk lihat riwayat historis. Dot kanan atas = status koneksi device, dot kiri atas = status nilai.',
+    refKey: 'refParams',
     icon: 'grid',
+    scrollY: 100,
   },
   {
     id: 'start',
-    title: 'Tombol Start / Stop',
-    desc: 'Mulai sesi pengukuran sebelum mengambil sampel air. Data yang masuk akan di-tag dengan lokasi sesi tersebut.',
-    highlight: { top: 500, left: 16, width: SW - 32, height: 48 },
-    arrowDir: 'up',
+    title: 'Start / Stop Sesi',
+    desc: 'Mulai sesi pengukuran sebelum ambil sampel. Data otomatis di-tag dengan lokasi sesi.',
+    refKey: 'refStartBtn',
     icon: 'play-circle',
+    scrollY: 300,
   },
   {
     id: 'notif',
     title: 'Notifikasi Alert',
-    desc: 'Bell akan menyala jika ada parameter yang melewati ambang batas Permenkes No. 32/2017.',
-    highlight: { top: 52, left: SW - 140, width: 40, height: 40 },
-    arrowDir: 'down',
+    desc: 'Bell menyala jika parameter melewati ambang batas Permenkes No. 32/2017.',
+    refKey: 'refNotifBtn',
     icon: 'notifications',
+    scrollY: 0,
   },
   {
     id: 'settings',
     title: 'Pengaturan',
-    desc: 'Atur threshold parameter, kelola perangkat sensor, dan konfigurasi WiFi ESP32.',
-    highlight: { top: 52, left: SW - 48, width: 36, height: 40 },
-    arrowDir: 'down',
+    desc: 'Atur threshold, kelola device sensor, konfigurasi WiFi ESP32, dan ulangi tour ini.',
+    refKey: 'refSettingBtn',
     icon: 'settings',
-  },
-  {
-    id: 'history',
-    title: 'Riwayat & Export',
-    desc: 'Tap kartu parameter, lihat riwayat, filter by tanggal/jam/zona, lalu export CSV langsung dari backend.',
-    highlight: null,
-    icon: 'time',
+    scrollY: 0,
   },
   {
     id: 'done',
     title: 'Siap digunakan!',
-    desc: 'Kamu bisa buka tour ini lagi kapan saja dari menu Pengaturan.',
-    highlight: null,
+    desc: 'Tour bisa diulang kapan saja dari menu Pengaturan.',
+    refKey: null,
     icon: 'checkmark-circle',
+    scrollY: 0,
   },
 ];
 
-export default function QuickTour({ visible, onDone }) {
+export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
   const [step, setStep] = useState(0);
+  const [highlight, setHighlight] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const current = STEPS[step];
-  const isFirst = step === 0;
-  const isLast = step === STEPS.length - 1;
+
+  const measureRef = useCallback((refKey) => {
+    if (!refKey || !refs[refKey]?.current) {
+      setHighlight(null);
+      return;
+    }
+
+    refs[refKey].current.measure((x, y, width, height, pageX, pageY) => {
+      setHighlight({ top: pageY, left: pageX, width, height });
+    });
+  }, [refs]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) return undefined;
+
     fadeAnim.setValue(0);
-    slideAnim.setValue(20);
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }, [step, visible, fadeAnim, slideAnim]);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+
+    if (scrollRef?.current) {
+      scrollRef.current.scrollTo({ y: current.scrollY, animated: true });
+    }
+
+    const t = setTimeout(() => measureRef(current.refKey), 400);
+    return () => clearTimeout(t);
+  }, [step, visible, current.refKey, current.scrollY, fadeAnim, measureRef, scrollRef]);
 
   useEffect(() => {
-    if (!current?.highlight || !visible) return undefined;
+    if (!highlight) return undefined;
+
     pulseAnim.setValue(1);
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.03, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.025, duration: 700, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [step, visible, current?.highlight, pulseAnim]);
+  }, [highlight, pulseAnim]);
 
   const handleDone = async () => {
     await AsyncStorage.setItem(TOUR_KEY, 'true');
-    onDone?.();
     setStep(0);
+    onDone?.();
   };
 
   const handleNext = () => {
-    if (isLast) {
-      handleDone();
-    } else {
-      setStep((s) => s + 1);
-    }
+    if (step === STEPS.length - 1) handleDone();
+    else setStep((s) => s + 1);
   };
 
   const handleBack = () => setStep((s) => Math.max(0, s - 1));
 
   const handleSkip = async () => {
     await AsyncStorage.setItem(TOUR_KEY, 'true');
-    onDone?.();
     setStep(0);
+    onDone?.();
   };
 
-  const tooltipStyle = current.highlight && current.arrowDir === 'up'
-    ? { top: current.highlight.top + current.highlight.height + 20 }
-    : { bottom: 100 };
+  const tooltipTop = highlight
+    ? (highlight.top + highlight.height + 16 + 180 < SH
+        ? highlight.top + highlight.height + 16
+        : Math.max(24, highlight.top - 220))
+    : SH / 2 - 140;
 
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
-      <View style={{ flex: 1 }}>
-        <View style={{
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: 'rgba(0,0,0,0.72)',
-        }} />
+    <Modal visible transparent animationType="none" statusBarTranslucent>
+      <View style={StyleSheet.absoluteFill}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.68)' }]} />
 
-        {current.highlight && (
+        {highlight && (
           <Animated.View style={{
             position: 'absolute',
-            top: current.highlight.top - 6,
-            left: current.highlight.left - 6,
-            width: current.highlight.width + 12,
-            height: current.highlight.height + 12,
+            top: highlight.top - 6,
+            left: highlight.left - 6,
+            width: highlight.width + 12,
+            height: highlight.height + 12,
             borderRadius: 16,
-            borderWidth: 2.5,
+            borderWidth: 2,
             borderColor: '#7CB9D8',
-            backgroundColor: 'transparent',
             transform: [{ scale: pulseAnim }],
             shadowColor: '#7CB9D8',
             shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.8,
-            shadowRadius: 12,
-            elevation: 10,
+            shadowOpacity: 0.9,
+            shadowRadius: 10,
+            elevation: 8,
           }} />
         )}
 
-        <Animated.View style={[{
+        <Animated.View style={{
           position: 'absolute',
+          top: tooltipTop,
           left: 20,
           right: 20,
           opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }, tooltipStyle]}>
+        }}>
           <View style={{
-            backgroundColor: '#fff',
-            borderRadius: 20,
-            padding: 20,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.15,
-            shadowRadius: 20,
-            elevation: 12,
+            backgroundColor: '#fff', borderRadius: 20, padding: 20,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.15, shadowRadius: 16, elevation: 10,
           }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <View style={{
-                width: 40, height: 40, borderRadius: 20,
+                width: 38, height: 38, borderRadius: 19,
                 backgroundColor: '#EFF8FF', justifyContent: 'center', alignItems: 'center',
               }}>
-                <Ionicons name={current.icon} size={20} color="#5AA3C8" />
+                <Ionicons name={current.icon} size={19} color="#5AA3C8" />
               </View>
               <Text style={{ fontSize: 11, color: '#8BAFC0', fontWeight: '600' }}>
                 {step + 1} / {STEPS.length}
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 5, marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
               {STEPS.map((tourStep, i) => (
-                <View
-                  key={tourStep.id}
-                  style={{
-                    height: 4,
-                    borderRadius: 2,
-                    flex: i === step ? 2 : 1,
-                    backgroundColor: i <= step ? '#7CB9D8' : '#E2EEF5',
-                  }}
-                />
+                <View key={tourStep.id} style={{
+                  height: 3, borderRadius: 2,
+                  flex: i === step ? 2 : 1,
+                  backgroundColor: i <= step ? '#7CB9D8' : '#E2EEF5',
+                }} />
               ))}
             </View>
 
-            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3040', marginBottom: 8 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A3040', marginBottom: 6 }}>
               {current.title}
             </Text>
-            <Text style={{ fontSize: 13, color: '#6B7280', lineHeight: 20, marginBottom: 20 }}>
+            <Text style={{ fontSize: 13, color: '#6B7280', lineHeight: 20, marginBottom: 18 }}>
               {current.desc}
             </Text>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              {isFirst ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {step === 0 ? (
                 <TouchableOpacity
                   onPress={handleSkip}
                   style={{
                     flex: 1, borderWidth: 1.5, borderColor: '#D1E8F5',
-                    borderRadius: 12, paddingVertical: 11, alignItems: 'center',
+                    borderRadius: 11, paddingVertical: 10, alignItems: 'center',
                   }}
                 >
                   <Text style={{ color: '#8BAFC0', fontWeight: '600', fontSize: 13 }}>Lewati</Text>
@@ -227,28 +222,31 @@ export default function QuickTour({ visible, onDone }) {
                 <TouchableOpacity
                   onPress={handleBack}
                   style={{
-                    width: 44, borderWidth: 1.5, borderColor: '#D1E8F5',
-                    borderRadius: 12, paddingVertical: 11, alignItems: 'center',
+                    width: 42, borderWidth: 1.5, borderColor: '#D1E8F5',
+                    borderRadius: 11, paddingVertical: 10, alignItems: 'center',
                   }}
                 >
-                  <Ionicons name="chevron-back" size={18} color="#8BAFC0" />
+                  <Ionicons name="chevron-back" size={17} color="#8BAFC0" />
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity
                 onPress={handleNext}
-                activeOpacity={0.85}
                 style={{
-                  flex: 1, backgroundColor: isLast ? '#16A34A' : '#5AA3C8',
-                  borderRadius: 12, paddingVertical: 11,
-                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6,
+                  flex: 1,
+                  backgroundColor: step === STEPS.length - 1 ? '#22C55E' : '#5AA3C8',
+                  borderRadius: 11, paddingVertical: 10,
+                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
                 }}
               >
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                  {isLast ? 'Mulai Pakai' : 'Lanjut'}
+                  {step === STEPS.length - 1 ? 'Mulai Pakai' : 'Lanjut'}
                 </Text>
-                {!isLast && <Ionicons name="chevron-forward" size={16} color="#fff" />}
-                {isLast && <Ionicons name="checkmark" size={16} color="#fff" />}
+                <Ionicons
+                  name={step === STEPS.length - 1 ? 'checkmark' : 'chevron-forward'}
+                  size={15}
+                  color="#fff"
+                />
               </TouchableOpacity>
             </View>
           </View>
