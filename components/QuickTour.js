@@ -12,7 +12,7 @@ const PAD = 8;
 const SCREEN_MARGIN = 16;
 const TOOLTIP_MAX_W = 380;
 const TOOLTIP_EST_H = 248;
-const MEASURE_DELAYS = [80, 180, 320];
+const MEASURE_DELAYS = [120, 260, 420];
 
 const STEPS = [
   {
@@ -218,6 +218,17 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     node.measure((_x, _y, width, height, pageX, pageY) => onMeasure(pageX, pageY, width, height));
   }, [current.id, refs, window.height, window.width]);
 
+  const getTargetScrollY = useCallback(() => {
+    const layout = refs[current.refKey]?.layout;
+    if (!layout) return current.scrollY ?? 0;
+
+    const desiredTop = current.id === 'params'
+      ? Math.max(84, window.height * 0.18)
+      : Math.max(16, window.height * 0.12);
+
+    return Math.max(0, layout.y - desiredTop);
+  }, [current.id, current.refKey, current.scrollY, refs, window.height]);
+
   useEffect(() => {
     if (!visible) return undefined;
 
@@ -242,7 +253,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       if (runId !== measureRunId.current) return;
 
       if (scrollRef?.current) {
-        scrollRef.current.scrollTo({ y: current.scrollY ?? 0, animated: false });
+        scrollRef.current.scrollTo({ y: getTargetScrollY(), animated: false });
       }
 
       MEASURE_DELAYS.forEach((delay, index) => {
@@ -256,7 +267,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       timers.forEach(clearTimeout);
       interaction?.cancel?.();
     };
-  }, [step, visible, current.id, current.refKey, current.scrollY, measureStep, scrollRef, window.height, window.width]);
+  }, [step, visible, current.id, current.refKey, current.scrollY, getTargetScrollY, measureStep, scrollRef, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -283,18 +294,10 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     const width = Math.min(window.width - SCREEN_MARGIN * 2, TOOLTIP_MAX_W);
     const fallbackLeft = (window.width - width) / 2;
 
-    if (isCompact) {
-      return {
-        top: clamp(window.height - TOOLTIP_EST_H - 14, SCREEN_MARGIN, window.height - 180),
-        left: SCREEN_MARGIN,
-        width: window.width - SCREEN_MARGIN * 2,
-      };
-    }
-
     if (!targetHighlight) {
       return {
         top: clamp(window.height / 2 - TOOLTIP_EST_H / 2, SCREEN_MARGIN, window.height - TOOLTIP_EST_H - SCREEN_MARGIN),
-        left: fallbackLeft,
+        left: isCompact ? SCREEN_MARGIN : fallbackLeft,
         width,
       };
     }
@@ -302,8 +305,22 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     const below = targetHighlight.top + targetHighlight.height + PAD + 16;
     const above = targetHighlight.top - PAD - TOOLTIP_EST_H - 16;
     const centerLeft = targetHighlight.left + targetHighlight.width / 2 - width / 2;
-    const left = clamp(centerLeft, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN);
+    const left = isCompact ? SCREEN_MARGIN : clamp(centerLeft, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN);
+    const compactWidth = window.width - SCREEN_MARGIN * 2;
     const hasRoomBelow = below + TOOLTIP_EST_H < window.height - SCREEN_MARGIN;
+    const hasRoomAbove = above > SCREEN_MARGIN;
+
+    if (isCompact) {
+      return {
+        top: hasRoomBelow
+          ? below
+          : (hasRoomAbove
+            ? above
+            : clamp(window.height - TOOLTIP_EST_H - 14, SCREEN_MARGIN, window.height - 180)),
+        left,
+        width: compactWidth,
+      };
+    }
 
     return {
       top: hasRoomBelow ? below : clamp(above, SCREEN_MARGIN, window.height - TOOLTIP_EST_H - SCREEN_MARGIN),

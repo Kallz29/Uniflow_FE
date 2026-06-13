@@ -168,7 +168,25 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const refSettingBtn = useRef(null);
   const refHeader = useRef(null);
   const scrollRef = useRef(null);
+  const [tourLayouts, setTourLayouts] = useState({});
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
+
+  const captureTourLayout = useCallback((key) => (event) => {
+    const { x, y, width, height } = event.nativeEvent.layout;
+    setTourLayouts((prev) => {
+      const old = prev[key];
+      if (
+        old
+        && old.x === x
+        && old.y === y
+        && old.width === width
+        && old.height === height
+      ) {
+        return prev;
+      }
+      return { ...prev, [key]: { x, y, width, height } };
+    });
+  }, []);
 
   const applyDashboardSnapshot = useCallback((snapshot) => {
     const {
@@ -659,7 +677,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7CB9D8" />}
     >
       {/* ── Header ── */}
-      <View ref={refHeader} style={styles.header}>
+      <View ref={refHeader} onLayout={captureTourLayout('refHeader')} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
             <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
@@ -670,7 +688,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           </View>
           <View style={styles.headerIcons}>
             {/* Notifications */}
-            <TouchableOpacity ref={refNotifBtn} onPress={() => setShowAlertsModal(true)} style={styles.statusIndicator}>
+            <TouchableOpacity
+              ref={refNotifBtn}
+              onLayout={captureTourLayout('refNotifBtn')}
+              onPress={() => setShowAlertsModal(true)}
+              style={styles.statusIndicator}
+            >
               <Ionicons name="notifications" size={20} color="#FFFFFF" />
               {unreadCount > 0 && (
                 <View style={{
@@ -689,11 +712,21 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               <Ionicons name="person" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             {/* AI Chat */}
-            <TouchableOpacity ref={refAI} onPress={onNavigateToAI} style={styles.statusIndicator}>
+            <TouchableOpacity
+              ref={refAI}
+              onLayout={captureTourLayout('refAI')}
+              onPress={onNavigateToAI}
+              style={styles.statusIndicator}
+            >
               <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             {/* Settings */}
-            <TouchableOpacity ref={refSettingBtn} onPress={openSettingsMenu} style={styles.statusIndicator}>
+            <TouchableOpacity
+              ref={refSettingBtn}
+              onLayout={captureTourLayout('refSettingBtn')}
+              onPress={openSettingsMenu}
+              style={styles.statusIndicator}
+            >
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -751,7 +784,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         <LoadingSkeleton />
       ) : (
         <>
-          <View ref={refWQI} style={styles.statusSection}>
+          <View ref={refWQI} onLayout={captureTourLayout('refWQI')} style={styles.statusSection}>
             <StatusCard
               onHistoryClick={() => setShowOverallHistory(true)}
               wqiScore={overallData?.value}
@@ -761,7 +794,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           </View>
 
           {stats && (
-            <View ref={refStats} style={styles.statsStrip}>
+            <View ref={refStats} onLayout={captureTourLayout('refStats')} style={styles.statsStrip}>
               {getAverageStats().map((s) => {
                 const statusStyle = AVG_STATUS_STYLE[s.status] || AVG_STATUS_STYLE.good;
                 return (
@@ -785,7 +818,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
           )}
 
           {/* Start / Stop Measurement */}
-          <View ref={refStartBtn} style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          <View ref={refStartBtn} onLayout={captureTourLayout('refStartBtn')} style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity
               onPress={() => onNavigateToMeasurement?.()}
               activeOpacity={0.85}
@@ -826,7 +859,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
             </View>
           </View>
 
-          <View ref={refParams} style={styles.cardsGrid}>
+          <View ref={refParams} onLayout={captureTourLayout('refParams')} style={styles.cardsGrid}>
             {cardRows.map((row, rowIdx) => (
               <View key={rowIdx} style={styles.cardRow}>
                 {row.map((item) => {
@@ -1784,7 +1817,16 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       <QuickTour
         visible={showTour}
         onDone={() => setShowTour(false)}
-        refs={{ refHeader, refWQI, refStats, refParams, refStartBtn, refNotifBtn, refAI, refSettingBtn }}
+        refs={{
+          refHeader: { current: refHeader.current, layout: tourLayouts.refHeader },
+          refWQI: { current: refWQI.current, layout: tourLayouts.refWQI },
+          refStats: { current: refStats.current, layout: tourLayouts.refStats },
+          refParams: { current: refParams.current, layout: tourLayouts.refParams },
+          refStartBtn: { current: refStartBtn.current, layout: tourLayouts.refStartBtn },
+          refNotifBtn: { current: refNotifBtn.current, layout: tourLayouts.refNotifBtn },
+          refAI: { current: refAI.current, layout: tourLayouts.refAI },
+          refSettingBtn: { current: refSettingBtn.current, layout: tourLayouts.refSettingBtn },
+        }}
         scrollRef={scrollRef}
       />
     </ScrollView>
