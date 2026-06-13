@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, Modal,
-  Animated, InteractionManager, StyleSheet, useWindowDimensions,
+  Animated, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,7 +12,6 @@ const PAD = 8;
 const SCREEN_MARGIN = 16;
 const TOOLTIP_MAX_W = 380;
 const TOOLTIP_EST_H = 248;
-const MEASURE_DELAYS = [120, 260, 420];
 
 const STEPS = [
   {
@@ -96,19 +95,6 @@ const clamp = (value, min, max) => {
   return Math.min(Math.max(value, min), max);
 };
 
-const getFallbackHighlight = (stepId, window) => {
-  const topTargets = ['welcome', 'notif', 'settings', 'ai', 'done'];
-  const y = topTargets.includes(stepId) ? 52 : Math.max(104, window.height * 0.28);
-  const width = Math.min(window.width - SCREEN_MARGIN * 2, stepId === 'params' ? 360 : 260);
-  const height = stepId === 'params' ? 220 : 84;
-  return {
-    top: clamp(y, SCREEN_MARGIN, window.height - height - SCREEN_MARGIN),
-    left: clamp((window.width - width) / 2, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN),
-    width,
-    height,
-  };
-};
-
 const Spotlight = ({ highlight, screenWidth, screenHeight }) => {
   if (!highlight) {
     return (
@@ -171,9 +157,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
   const window = useWindowDimensions();
   const [step, setStep] = useState(0);
   const [highlight, setHighlight] = useState(null);
-  const [measuring, setMeasuring] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const measureRunId = useRef(0);
 
   const current = STEPS[step];
   const isCompact = window.width < 430 || window.height < 720;
@@ -182,7 +166,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
     if (current.noHighlight) return null;
 
     const layout = refs[refKey]?.layout;
-    if (!layout) return getFallbackHighlight(current.id, window);
+    if (!layout) return null;
 
     const width = Math.min(layout.width, window.width - SCREEN_MARGIN * 2);
     const height = Math.min(layout.height, window.height - SCREEN_MARGIN * 2);
@@ -194,63 +178,6 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
       height,
     };
   }, [current.id, current.noHighlight, refs, scrollY, window]);
-
-  const measureStep = useCallback((refKey, runId = measureRunId.current, commit = true, scrollPosition = scrollY) => {
-    if (current.noHighlight) {
-      setHighlight(null);
-      setMeasuring(false);
-      return;
-    }
-
-    const layoutHighlight = getLayoutHighlight(refKey, scrollPosition);
-    const fallback = getFallbackHighlight(current.id, window);
-
-    if (!refKey || !refs[refKey]?.current) {
-      setHighlight(layoutHighlight || fallback);
-      setMeasuring(false);
-      return;
-    }
-
-    const node = refs[refKey].current;
-    const onMeasure = (left, top, width, height) => {
-      if (runId !== measureRunId.current) return;
-
-      if (!width || !height) {
-        if (commit) {
-          setHighlight(layoutHighlight || fallback);
-          setMeasuring(false);
-        }
-        return;
-      }
-      const targetWidth = Math.min(width, window.width - SCREEN_MARGIN * 2);
-      const targetHeight = Math.min(height, window.height - SCREEN_MARGIN * 2);
-
-      if (!commit) return;
-
-      setHighlight({
-        top: clamp(top, SCREEN_MARGIN, window.height - targetHeight - SCREEN_MARGIN),
-        left: clamp(left, SCREEN_MARGIN, window.width - targetWidth - SCREEN_MARGIN),
-        width: targetWidth,
-        height: targetHeight,
-      });
-      setMeasuring(false);
-    };
-
-    if (layoutHighlight) {
-      if (commit) {
-        setHighlight(layoutHighlight);
-        setMeasuring(false);
-      }
-      return;
-    }
-
-    if (typeof node.measureInWindow === 'function') {
-      node.measureInWindow((left, top, width, height) => onMeasure(left, top, width, height));
-      return;
-    }
-
-    node.measure((_x, _y, width, height, pageX, pageY) => onMeasure(pageX, pageY, width, height));
-  }, [current.id, current.noHighlight, getLayoutHighlight, refs, scrollY, window]);
 
   const getTargetScrollY = useCallback(() => {
     if (current.noHighlight) return 0;
@@ -280,36 +207,18 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
   useEffect(() => {
     if (!visible) return undefined;
 
-    measureRunId.current += 1;
-    const runId = measureRunId.current;
-    const timers = [];
-    setMeasuring(true);
-    setHighlight(current.noHighlight ? null : getLayoutHighlight(current.refKey));
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      if (runId !== measureRunId.current) return;
+    const targetScrollY = getTargetScrollY();
+    if (scrollRef?.current) {
+      scrollRef.current.scrollTo({ y: targetScrollY, animated: false });
+    }
+    setHighlight(getLayoutHighlight(current.refKey, targetScrollY));
 
-      const targetScrollY = getTargetScrollY();
-      if (scrollRef?.current) {
-        scrollRef.current.scrollTo({ y: targetScrollY, animated: false });
-      }
-
-      MEASURE_DELAYS.forEach((delay, index) => {
-        const isLastMeasure = index === MEASURE_DELAYS.length - 1;
-        const timer = setTimeout(() => measureStep(current.refKey, runId, isLastMeasure, targetScrollY), delay);
-        timers.push(timer);
-      });
-    });
-
-    return () => {
-      timers.forEach(clearTimeout);
-      interaction?.cancel?.();
-    };
-  }, [step, visible, current.id, current.noHighlight, current.refKey, current.scrollY, getLayoutHighlight, getTargetScrollY, measureStep, scrollRef, window.height, window.width]);
+    return undefined;
+  }, [step, visible, current.refKey, getLayoutHighlight, getTargetScrollY, scrollRef, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
     if (!current.refKey || current.noHighlight) setHighlight(null);
-    setMeasuring(false);
     return undefined;
   }, [current.id, current.refKey, visible, window.height, window.width]);
 
@@ -368,7 +277,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
 
   if (!visible) return null;
 
-  const activeHighlight = current.noHighlight ? null : (highlight || getFallbackHighlight(current.id, window));
+  const activeHighlight = current.noHighlight ? null : highlight;
 
   return (
     <Modal visible transparent animationType="none">
