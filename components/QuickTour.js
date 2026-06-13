@@ -19,7 +19,7 @@ const STEPS = [
     id: 'welcome',
     title: 'Selamat datang di UniFlow!',
     desc: 'Aplikasi monitoring kualitas air real-time kampus Telkom University. Mari kenalan dulu.',
-    refKey: null,
+    refKey: 'refHeader',
     icon: 'water',
     scrollY: 0,
   },
@@ -83,7 +83,7 @@ const STEPS = [
     id: 'done',
     title: 'Siap digunakan!',
     desc: 'Tour bisa diulang kapan saja dari Pengaturan > Panduan Aplikasi.',
-    refKey: null,
+    refKey: 'refHeader',
     icon: 'checkmark-circle',
     scrollY: 0,
   },
@@ -92,6 +92,19 @@ const STEPS = [
 const clamp = (value, min, max) => {
   if (max < min) return min;
   return Math.min(Math.max(value, min), max);
+};
+
+const getFallbackHighlight = (stepId, window) => {
+  const topTargets = ['welcome', 'notif', 'settings', 'ai', 'done'];
+  const y = topTargets.includes(stepId) ? 52 : Math.max(104, window.height * 0.28);
+  const width = Math.min(window.width - SCREEN_MARGIN * 2, stepId === 'params' ? 360 : 260);
+  const height = stepId === 'params' ? 220 : 84;
+  return {
+    top: clamp(y, SCREEN_MARGIN, window.height - height - SCREEN_MARGIN),
+    left: clamp((window.width - width) / 2, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN),
+    width,
+    height,
+  };
 };
 
 const Spotlight = ({ highlight, screenWidth, screenHeight }) => {
@@ -164,8 +177,10 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
   const isCompact = window.width < 430 || window.height < 720;
 
   const measureStep = useCallback((refKey, runId = measureRunId.current, commit = true) => {
+    const fallback = getFallbackHighlight(current.id, window);
+
     if (!refKey || !refs[refKey]?.current) {
-      setHighlight(null);
+      setHighlight(fallback);
       setMeasuring(false);
       return;
     }
@@ -176,7 +191,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
       if (!width || !height) {
         if (commit) {
-          setHighlight(null);
+          setHighlight(fallback);
           setMeasuring(false);
         }
         return;
@@ -201,7 +216,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     }
 
     node.measure((_x, _y, width, height, pageX, pageY) => onMeasure(pageX, pageY, width, height));
-  }, [refs, window.height, window.width]);
+  }, [current.id, refs, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -221,10 +236,8 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     measureRunId.current += 1;
     const runId = measureRunId.current;
     const timers = [];
-    if (current.refKey) {
-      setMeasuring(true);
-      setHighlight(null);
-    }
+    setMeasuring(true);
+    setHighlight(getFallbackHighlight(current.id, window));
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (runId !== measureRunId.current) return;
 
@@ -243,16 +256,14 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       timers.forEach(clearTimeout);
       interaction?.cancel?.();
     };
-  }, [step, visible, current.refKey, current.scrollY, measureStep, scrollRef]);
+  }, [step, visible, current.id, current.refKey, current.scrollY, measureStep, scrollRef, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
-    if (!current.refKey) {
-      setHighlight(null);
-      setMeasuring(false);
-    }
+    if (!current.refKey) setHighlight(getFallbackHighlight(current.id, window));
+    setMeasuring(false);
     return undefined;
-  }, [current.refKey, visible]);
+  }, [current.id, current.refKey, visible, window.height, window.width]);
 
   const finish = async () => {
     await AsyncStorage.setItem(TOUR_KEY, 'true');
@@ -303,7 +314,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
   if (!visible) return null;
 
-  const activeHighlight = measuring ? null : highlight;
+  const activeHighlight = highlight || getFallbackHighlight(current.id, window);
 
   return (
     <Modal visible transparent animationType="none">

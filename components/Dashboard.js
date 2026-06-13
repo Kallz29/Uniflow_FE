@@ -22,6 +22,8 @@ import {
   WATER_UNITS,
   buildHistory as buildHistoryFromSensor,
   buildOverallData as buildOverallSnapshot,
+  getStatus,
+  mapWQIStatus,
   mapSensorToCards as mapSensorCards,
   parseLocalDate as parseSensorDate,
   validateThresholdPayload,
@@ -39,6 +41,31 @@ const GRID_PADDING = 16;
 const GRID_GAP = 10;
 const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
+
+const AVG_STATUS_STYLE = {
+  good: { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534', dot: '#22C55E' },
+  warning: { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E', dot: '#F59E0B' },
+  danger: { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', dot: '#EF4444' },
+};
+
+const parseSessionDate = (str) => {
+  if (!str) return new Date();
+  if (str instanceof Date) return str;
+  const raw = String(str).trim();
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(hasTimezone ? raw : normalized);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const getWqiHighlightStatus = (value, explicitStatus) => {
+  if (explicitStatus) return mapWQIStatus(explicitStatus);
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 'good';
+  if (n >= 80) return 'good';
+  if (n >= 60) return 'warning';
+  return 'danger';
+};
 
 const LoadingSkeleton = () => (
   <View style={{ padding: 16, gap: 12 }}>
@@ -139,6 +166,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const refNotifBtn = useRef(null);
   const refAI = useRef(null);
   const refSettingBtn = useRef(null);
+  const refHeader = useRef(null);
   const scrollRef = useRef(null);
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
 
@@ -281,7 +309,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       return;
     }
 
-    const startMs = new Date(activeMeasurement.start_time).getTime();
+    const startMs = parseSessionDate(activeMeasurement.start_time).getTime();
     const tick = () => {
       if (Number.isNaN(startMs)) {
         setElapsed(0);
@@ -565,6 +593,47 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
+  const getAverageStats = () => {
+    if (!stats) return [];
+    const th = threshold || {};
+    const historyWqi = (historyList || [])
+      .map((item) => Number(item?.wqi_score))
+      .filter(Number.isFinite);
+    const computedAvgWqi = historyWqi.length
+      ? historyWqi.reduce((sum, value) => sum + value, 0) / historyWqi.length
+      : null;
+    const wqiValue = stats.avg_wqi_score ?? stats.avg_wqi ?? stats.wqi_score ?? computedAvgWqi;
+    const wqiStatus = getWqiHighlightStatus(wqiValue, stats.avg_wqi_status);
+
+    return [
+      {
+        label: 'Avg WQI',
+        value: wqiValue != null ? String(Math.round(Number(wqiValue))) : '-',
+        status: wqiValue != null ? wqiStatus : 'good',
+      },
+      {
+        label: 'Avg pH',
+        value: stats.avg_ph != null ? String(parseFloat(stats.avg_ph).toFixed(1)) : '-',
+        status: getStatus(stats.avg_ph, th.ph_min ?? 6.5, th.ph_max ?? 8.5),
+      },
+      {
+        label: 'Avg Suhu',
+        value: stats.avg_temperature != null ? `${parseFloat(stats.avg_temperature).toFixed(1)}${WATER_UNITS.temperature}` : '-',
+        status: getStatus(stats.avg_temperature, th.temp_min ?? 10, th.temp_max ?? 35),
+      },
+      {
+        label: 'Avg ppm',
+        value: stats.avg_tds != null ? String(parseFloat(stats.avg_tds).toFixed(0)) : '-',
+        status: getStatus(stats.avg_tds, th.tds_min ?? 0, th.tds_max ?? 500),
+      },
+      {
+        label: 'Avg NTU',
+        value: stats.avg_turbidity != null ? String(parseFloat(stats.avg_turbidity).toFixed(1)) : '-',
+        status: getStatus(stats.avg_turbidity, th.tss_min ?? 0, th.tss_max ?? 25),
+      },
+    ];
+  };
+
   const overallStatusText =
     overallData?.status === 'danger' ? 'Ada parameter di luar batas aman' :
       overallData?.status === 'warning' ? 'Beberapa parameter mendekati batas' :
@@ -590,7 +659,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7CB9D8" />}
     >
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View ref={refHeader} style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
             <Image source={require('../assets/logo.png')} style={styles.logo} resizeMode="contain" />
@@ -693,29 +762,25 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
           {stats && (
             <View ref={refStats} style={styles.statsStrip}>
-              {[
-                {
-                  label: 'Avg pH',
-                  value: stats.avg_ph != null ? String(parseFloat(stats.avg_ph).toFixed(1)) : '-',
-                },
-                {
-                  label: 'Avg Suhu',
-                  value: stats.avg_temperature != null ? `${parseFloat(stats.avg_temperature).toFixed(1)}${WATER_UNITS.temperature}` : '-',
-                },
-                {
-                  label: 'Avg ppm',
-                  value: stats.avg_tds != null ? String(parseFloat(stats.avg_tds).toFixed(0)) : '-',
-                },
-                {
-                  label: 'Avg NTU',
-                  value: stats.avg_turbidity != null ? String(parseFloat(stats.avg_turbidity).toFixed(1)) : '-',
-                },
-              ].map((s) => (
-                <View key={s.label} style={styles.statItem}>
-                  <Text style={styles.statValue}>{s.value}</Text>
+              {getAverageStats().map((s) => {
+                const statusStyle = AVG_STATUS_STYLE[s.status] || AVG_STATUS_STYLE.good;
+                return (
+                <View
+                  key={s.label}
+                  style={[
+                    styles.statItem,
+                    {
+                      backgroundColor: statusStyle.bg,
+                      borderColor: statusStyle.border,
+                    },
+                  ]}
+                >
+                  <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: statusStyle.dot, marginBottom: 4 }} />
+                  <Text style={[styles.statValue, { color: statusStyle.text }]}>{s.value}</Text>
                   <Text style={styles.statLabel}>{s.label}</Text>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -1719,7 +1784,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       <QuickTour
         visible={showTour}
         onDone={() => setShowTour(false)}
-        refs={{ refWQI, refStats, refParams, refStartBtn, refNotifBtn, refAI, refSettingBtn }}
+        refs={{ refHeader, refWQI, refStats, refParams, refStartBtn, refNotifBtn, refAI, refSettingBtn }}
         scrollRef={scrollRef}
       />
     </ScrollView>

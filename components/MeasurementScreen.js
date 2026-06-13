@@ -16,9 +16,14 @@ const START_COLOR = '#5AA3C8';
 const START_COLOR_DARK = '#3E8FB8';
 const STOP_COLOR_DARK = '#DC2626';
 
-const parseWIB = (str) => {
+const parseSessionDate = (str) => {
   if (!str) return new Date();
-  return new Date(new Date(str).getTime() + 7 * 60 * 60 * 1000);
+  if (str instanceof Date) return str;
+  const raw = String(str).trim();
+  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(hasTimezone ? raw : normalized);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 const formatElapsed = (sec) => {
@@ -78,8 +83,12 @@ export default function MeasurementScreen({ onBack }) {
       setElapsed(0);
       return;
     }
-    const startMs = new Date(activeMeasurement.start_time).getTime();
+    const startMs = parseSessionDate(activeMeasurement.start_time).getTime();
     const tick = () => {
+      if (Number.isNaN(startMs)) {
+        setElapsed(0);
+        return;
+      }
       const diff = Math.floor((Date.now() - startMs) / 1000);
       setElapsed(diff > 0 ? diff : 0);
     };
@@ -132,6 +141,19 @@ export default function MeasurementScreen({ onBack }) {
       setElapsed(0);
       fetchData();
     } catch (err) {
+      logError('MeasurementScreen.stop', err);
+      try {
+        const measRes = await getMeasurements();
+        const stillActive = (measRes.data || []).find((s) => s.status === 'active') || null;
+        setActiveMeasurement(stillActive);
+        setShowStopConfirm(false);
+        if (!stillActive) {
+          setElapsed(0);
+          return;
+        }
+      } catch (verifyErr) {
+        logError('MeasurementScreen.stop.verify', verifyErr);
+      }
       Alert.alert('Gagal', toUserMessage(err, 'Gagal menghentikan sesi'));
     } finally {
       setActionLoading(false);
@@ -320,7 +342,7 @@ export default function MeasurementScreen({ onBack }) {
               {[
                 { label: 'ID Sesi', value: `#${activeMeasurement.id}` },
                 { label: 'Lokasi', value: activeMeasurement.location || '-' },
-                { label: 'Mulai', value: parseWIB(activeMeasurement.start_time).toLocaleString('id-ID') },
+                { label: 'Mulai', value: parseSessionDate(activeMeasurement.start_time).toLocaleString('id-ID') },
                 { label: 'Durasi', value: formatElapsed(elapsed) },
               ].map((row) => (
                 <View key={row.label} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>

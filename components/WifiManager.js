@@ -298,14 +298,10 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
         setError(res.message || 'Gagal terhubung, cek password');
       }
     } catch (err) {
-      setPhase('error');
-      setError(
-        'Tidak dapat menjangkau ESP32.\n\n' +
-        'Pastikan:\n' +
-        '\u2022 HP terhubung ke WiFi "UniFlow-Setup"\n' +
-        '\u2022 Data seluler/VPN dimatikan\n' +
-        '\u2022 Pilih "Tetap terhubung" jika Android memberi peringatan'
-      );
+      // Request bisa putus karena ESP32 langsung berpindah ke WiFi tujuan.
+      // Poll dulu supaya kondisi sukses tidak ditampilkan sebagai gagal.
+      startPolling(targetSsid);
+      setStatusMsg(`Menunggu ESP32 terhubung ke "${targetSsid}"...`);
     }
   };
 
@@ -568,6 +564,14 @@ export default function WiFiManager({ onConnected }) {
 
   const handleEspConnected = useCallback((ssid) => {
     clearInterval(keepAliveRef.current);
+    setScanError(null);
+    setSetupWarning(null);
+    setScanHint(null);
+    setWifiStatus((prev) => ({
+      ...(prev || {}),
+      connected: true,
+      ssid,
+    }));
     setEspConnected(true);
     setEspConnectedSsid(ssid);
     setTimeout(() => onConnected?.(), 1500);
@@ -659,6 +663,9 @@ export default function WiFiManager({ onConnected }) {
 
       // Kalau ESP sudah connected ke WiFi, stop scan langsung
       if (statusResult?.connected && statusResult?.ssid) {
+        setWifiStatus(statusResult);
+        setScanError(null);
+        setSetupWarning(null);
         handleEspConnected(statusResult.ssid);
         setScanning(false);
         return;

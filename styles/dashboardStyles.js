@@ -70,12 +70,15 @@ export const dashboardStyles = StyleSheet.create({
   /* ── Stats strip ── */
   statsStrip: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
     marginBottom: 16,
   },
   statItem: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '18%',
+    minWidth: 62,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingVertical: 10,
