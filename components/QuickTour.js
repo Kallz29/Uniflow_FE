@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, Modal,
-  Animated, Dimensions, StyleSheet,
+  Animated, InteractionManager, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Defs, Rect, Mask } from 'react-native-svg';
 
-const { width: SW, height: SH } = Dimensions.get('window');
 const TOUR_KEY = 'uniflow_tour_done';
 const PAD = 8;
+const SCREEN_MARGIN = 16;
+const TOOLTIP_MAX_W = 380;
+const TOOLTIP_EST_H = 248;
+const MEASURE_DELAYS = [80, 180, 320];
 
 const STEPS = [
   {
@@ -37,20 +40,20 @@ const STEPS = [
     scrollY: 0,
   },
   {
-    id: 'params',
-    title: 'Parameter Air',
-    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Dot kanan atas menunjukkan koneksi device.',
-    refKey: 'refParams',
-    icon: 'grid',
-    scrollY: 120,
-  },
-  {
     id: 'start',
     title: 'Start / Stop Sesi',
     desc: 'Mulai sesi pengukuran sebelum ambil sampel. Data otomatis di-tag dengan lokasi sesi.',
     refKey: 'refStartBtn',
     icon: 'play-circle',
-    scrollY: 320,
+    scrollY: 0,
+  },
+  {
+    id: 'params',
+    title: 'Parameter Air',
+    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Dot kanan atas menunjukkan koneksi device.',
+    refKey: 'refParams',
+    icon: 'grid',
+    scrollY: 180,
   },
   {
     id: 'notif',
@@ -86,27 +89,38 @@ const STEPS = [
   },
 ];
 
-const Spotlight = ({ highlight, blinkAnim }) => {
+const clamp = (value, min, max) => {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
+};
+
+const Spotlight = ({ highlight, screenWidth, screenHeight }) => {
   if (!highlight) {
     return (
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.72)' }]} />
     );
   }
 
-  const { top, left, width, height } = highlight;
+  const { top, left, width: targetWidth, height: targetHeight } = highlight;
   const r = 16;
+  const cutout = {
+    x: Math.max(0, left - PAD),
+    y: Math.max(0, top - PAD),
+    width: Math.max(1, targetWidth + PAD * 2),
+    height: Math.max(1, targetHeight + PAD * 2),
+  };
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width={SW} height={SH}>
+      <Svg width="100%" height="100%">
         <Defs>
           <Mask id="mask">
-            <Rect x="0" y="0" width={SW} height={SH} fill="white" />
+            <Rect x="0" y="0" width={screenWidth} height={screenHeight} fill="white" />
             <Rect
-              x={left - PAD}
-              y={top - PAD}
-              width={width + PAD * 2}
-              height={height + PAD * 2}
+              x={cutout.x}
+              y={cutout.y}
+              width={cutout.width}
+              height={cutout.height}
               rx={r}
               ry={r}
               fill="black"
@@ -116,8 +130,8 @@ const Spotlight = ({ highlight, blinkAnim }) => {
         <Rect
           x="0"
           y="0"
-          width={SW}
-          height={SH}
+          width={screenWidth}
+          height={screenHeight}
           fill="rgba(0,0,0,0.75)"
           mask="url(#mask)"
         />
@@ -125,37 +139,69 @@ const Spotlight = ({ highlight, blinkAnim }) => {
 
       <Animated.View style={{
         position: 'absolute',
-        top: top - PAD,
-        left: left - PAD,
-        width: width + PAD * 2,
-        height: height + PAD * 2,
+        top: cutout.y,
+        left: cutout.x,
+        width: cutout.width,
+        height: cutout.height,
         borderRadius: r,
         borderWidth: 2,
         borderColor: 'rgba(124,185,216,0.95)',
-        opacity: blinkAnim,
+        opacity: 1,
       }} />
     </View>
   );
 };
 
 export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
+  const window = useWindowDimensions();
   const [step, setStep] = useState(0);
   const [highlight, setHighlight] = useState(null);
+  const [measuring, setMeasuring] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const blinkAnim = useRef(new Animated.Value(1)).current;
+  const measureRunId = useRef(0);
 
   const current = STEPS[step];
+  const isCompact = window.width < 430 || window.height < 720;
 
-  const measureStep = useCallback((refKey) => {
+  const measureStep = useCallback((refKey, runId = measureRunId.current, commit = true) => {
     if (!refKey || !refs[refKey]?.current) {
       setHighlight(null);
+      setMeasuring(false);
       return;
     }
 
-    refs[refKey].current.measure((_x, _y, width, height, pageX, pageY) => {
-      setHighlight({ top: pageY, left: pageX, width, height });
-    });
-  }, [refs]);
+    const node = refs[refKey].current;
+    const onMeasure = (left, top, width, height) => {
+      if (runId !== measureRunId.current) return;
+
+      if (!width || !height) {
+        if (commit) {
+          setHighlight(null);
+          setMeasuring(false);
+        }
+        return;
+      }
+      const targetWidth = Math.min(width, window.width - SCREEN_MARGIN * 2);
+      const targetHeight = Math.min(height, window.height - SCREEN_MARGIN * 2);
+
+      if (!commit) return;
+
+      setHighlight({
+        top: clamp(top, SCREEN_MARGIN, window.height - targetHeight - SCREEN_MARGIN),
+        left: clamp(left, SCREEN_MARGIN, window.width - targetWidth - SCREEN_MARGIN),
+        width: targetWidth,
+        height: targetHeight,
+      });
+      setMeasuring(false);
+    };
+
+    if (typeof node.measureInWindow === 'function') {
+      node.measureInWindow((left, top, width, height) => onMeasure(left, top, width, height));
+      return;
+    }
+
+    node.measure((_x, _y, width, height, pageX, pageY) => onMeasure(pageX, pageY, width, height));
+  }, [refs, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -166,28 +212,47 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       duration: 260,
       useNativeDriver: true,
     }).start();
-
-    if (scrollRef?.current) {
-      scrollRef.current.scrollTo({ y: current.scrollY ?? 0, animated: true });
-    }
-
-    const t = setTimeout(() => measureStep(current.refKey), 450);
-    return () => clearTimeout(t);
-  }, [step, visible, current.refKey, current.scrollY, fadeAnim, measureStep, scrollRef]);
+    return undefined;
+  }, [visible, fadeAnim]);
 
   useEffect(() => {
-    if (!highlight) return undefined;
+    if (!visible) return undefined;
 
-    blinkAnim.setValue(1);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(blinkAnim, { toValue: 0.35, duration: 420, useNativeDriver: true }),
-        Animated.timing(blinkAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [highlight, blinkAnim]);
+    measureRunId.current += 1;
+    const runId = measureRunId.current;
+    const timers = [];
+    if (current.refKey) {
+      setMeasuring(true);
+      setHighlight(null);
+    }
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      if (runId !== measureRunId.current) return;
+
+      if (scrollRef?.current) {
+        scrollRef.current.scrollTo({ y: current.scrollY ?? 0, animated: false });
+      }
+
+      MEASURE_DELAYS.forEach((delay, index) => {
+        const isLastMeasure = index === MEASURE_DELAYS.length - 1;
+        const timer = setTimeout(() => measureStep(current.refKey, runId, isLastMeasure), delay);
+        timers.push(timer);
+      });
+    });
+
+    return () => {
+      timers.forEach(clearTimeout);
+      interaction?.cancel?.();
+    };
+  }, [step, visible, current.refKey, current.scrollY, measureStep, scrollRef]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    if (!current.refKey) {
+      setHighlight(null);
+      setMeasuring(false);
+    }
+    return undefined;
+  }, [current.refKey, visible]);
 
   const finish = async () => {
     await AsyncStorage.setItem(TOUR_KEY, 'true');
@@ -203,29 +268,56 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
   const goBack = () => setStep((s) => Math.max(0, s - 1));
 
-  const getTooltipTop = () => {
-    if (!highlight) return SH / 2 - 130;
-    const below = highlight.top + highlight.height + PAD + 16;
-    const tooltipH = 220;
-    if (below + tooltipH < SH - 40) return below;
-    return Math.max(24, highlight.top - PAD - tooltipH - 16);
+  const getTooltipLayout = (targetHighlight) => {
+    const width = Math.min(window.width - SCREEN_MARGIN * 2, TOOLTIP_MAX_W);
+    const fallbackLeft = (window.width - width) / 2;
+
+    if (isCompact) {
+      return {
+        top: clamp(window.height - TOOLTIP_EST_H - 14, SCREEN_MARGIN, window.height - 180),
+        left: SCREEN_MARGIN,
+        width: window.width - SCREEN_MARGIN * 2,
+      };
+    }
+
+    if (!targetHighlight) {
+      return {
+        top: clamp(window.height / 2 - TOOLTIP_EST_H / 2, SCREEN_MARGIN, window.height - TOOLTIP_EST_H - SCREEN_MARGIN),
+        left: fallbackLeft,
+        width,
+      };
+    }
+
+    const below = targetHighlight.top + targetHighlight.height + PAD + 16;
+    const above = targetHighlight.top - PAD - TOOLTIP_EST_H - 16;
+    const centerLeft = targetHighlight.left + targetHighlight.width / 2 - width / 2;
+    const left = clamp(centerLeft, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN);
+    const hasRoomBelow = below + TOOLTIP_EST_H < window.height - SCREEN_MARGIN;
+
+    return {
+      top: hasRoomBelow ? below : clamp(above, SCREEN_MARGIN, window.height - TOOLTIP_EST_H - SCREEN_MARGIN),
+      left,
+      width,
+    };
   };
 
   if (!visible) return null;
 
+  const activeHighlight = measuring ? null : highlight;
+
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent>
-      <Spotlight highlight={highlight} blinkAnim={blinkAnim} />
+    <Modal visible transparent animationType="none">
+      <Spotlight highlight={activeHighlight} screenWidth={window.width} screenHeight={window.height} />
 
       <Animated.View style={{
         position: 'absolute',
-        top: getTooltipTop(),
-        left: 20,
-        right: 20,
+        ...getTooltipLayout(activeHighlight),
         opacity: fadeAnim,
       }}>
         <View style={{
-          backgroundColor: '#fff', borderRadius: 20, padding: 20,
+          backgroundColor: '#fff',
+          borderRadius: isCompact ? 18 : 20,
+          padding: isCompact ? 16 : 20,
           shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.18, shadowRadius: 20, elevation: 14,
         }}>

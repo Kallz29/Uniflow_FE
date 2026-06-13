@@ -89,6 +89,13 @@ const connectWifi    = (ssid, pass) => espFetch('/connect',    {
 }, 15000);
 const disconnectWifi = ()           => espFetch('/disconnect', { method: 'POST' },          6000);
 
+const SETUP_CHECKLIST = [
+  'HP terhubung ke WiFi UniFlow-Setup',
+  'Data seluler dan VPN dimatikan sementara',
+  'Pilih Tetap terhubung jika Android memberi peringatan WiFi tanpa internet',
+  'Tunggu 10 detik setelah ESP32 dinyalakan, lalu coba scan ulang',
+];
+
 // ─── Signal strength ─────────────────────────────────────────
 const getSignalInfo = (rssi) => {
   if (rssi >= -50) return { icon: 'wifi',         color: '#22C55E', label: 'Kuat' };
@@ -146,7 +153,7 @@ const NetworkItem = ({ network, onPress, isConnected }) => {
             )}
           </View>
           <Text style={{ fontSize: 11, color: '#8BAFC0', marginTop: 2 }}>
-            {sig.label} · {network.rssi} dBm
+            {sig.label} {'\u00b7'} {network.rssi} dBm
           </Text>
         </View>
 
@@ -232,8 +239,8 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
         setError(
           `ESP32 belum terhubung ke "${targetSsid}" setelah ${CONNECT_POLL_TIMEOUT / 1000} detik.\n\n` +
           `Kemungkinan:\n` +
-          `• Password salah\n` +
-          `• WiFi "${targetSsid}" tidak terjangkau\n\n` +
+          `\u2022 Password salah\n` +
+          `\u2022 WiFi "${targetSsid}" tidak terjangkau\n\n` +
           `Kamu bisa langsung ke Dashboard dan coba lagi nanti.`
         );
         return;
@@ -295,9 +302,9 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
       setError(
         'Tidak dapat menjangkau ESP32.\n\n' +
         'Pastikan:\n' +
-        '• HP terhubung ke WiFi "UniFlow-Setup"\n' +
-        '• Data seluler/VPN dimatikan\n' +
-        '• Pilih "Tetap terhubung" jika Android memberi peringatan'
+        '\u2022 HP terhubung ke WiFi "UniFlow-Setup"\n' +
+        '\u2022 Data seluler/VPN dimatikan\n' +
+        '\u2022 Pilih "Tetap terhubung" jika Android memberi peringatan'
       );
     }
   };
@@ -549,6 +556,7 @@ export default function WiFiManager({ onConnected }) {
   const [scanHint,      setScanHint]      = useState(null);
   const [localIp,       setLocalIp]       = useState(null);
   const [retryInfo,     setRetryInfo]     = useState(null);
+  const [setupWarning,  setSetupWarning]  = useState(null);
   const [espConnected, setEspConnected]       = useState(false);
   const [espConnectedSsid, setEspConnectedSsid] = useState(null);
 
@@ -628,11 +636,15 @@ export default function WiFiManager({ onConnected }) {
     setScanError(null);
     setScanHint(null);
     setRetryInfo(null);
+    setSetupWarning(null);
 
     try {
       const ipAddress = await getLocalIpAddress();
       setLocalIp(ipAddress);
       const connectedToEspAp = isOnEspSetupNetwork(ipAddress);
+      if (!connectedToEspAp) {
+        setSetupWarning('HP belum berada di WiFi UniFlow-Setup. Hubungkan dulu ke jaringan setup ESP32, lalu tekan Refresh.');
+      }
 
       let scanResult   = { networks: [] };
       let statusResult = null;
@@ -686,15 +698,15 @@ export default function WiFiManager({ onConnected }) {
           setScanError(
             `HP sudah di jaringan ESP (${ipAddress}), tetapi ESP32 belum merespons.\n\n` +
             `Kemungkinan penyebab:\n` +
-            `• ESP32 masih proses koneksi ke WiFi kampus (~10 detik)\n` +
-            `• Data seluler/VPN aktif → Android memblokir HTTP ke 192.168.4.1\n` +
-            `• Pilih "Tetap terhubung" jika ada peringatan "WiFi tanpa internet"\n\n` +
+            `\u2022 ESP32 masih proses koneksi ke WiFi kampus (~10 detik)\n` +
+            `\u2022 Data seluler/VPN aktif \u2192 Android memblokir HTTP ke 192.168.4.1\n` +
+            `\u2022 Pilih "Tetap terhubung" jika ada peringatan "WiFi tanpa internet"\n\n` +
             `Tunggu 10 detik lalu tekan Coba Lagi.`
           );
         } else {
           setScanError(
-            'Tidak dapat terhubung ke ESP32.\n' +
-            'Pastikan HP terhubung ke WiFi "UniFlow-Setup".'
+            'HP belum terhubung ke jaringan setup ESP32.\n' +
+            'Pilih WiFi "UniFlow-Setup" dari pengaturan WiFi, lalu kembali ke aplikasi.'
           );
         }
         return;
@@ -816,7 +828,7 @@ export default function WiFiManager({ onConnected }) {
               <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{wifiStatus.ssid}</Text>
               <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
                 {wifiStatus.ip ? `IP: ${wifiStatus.ip}` : 'Terhubung'}
-                {wifiStatus.signal ? ` · ${wifiStatus.signal} dBm` : ''}
+                {wifiStatus.signal ? ` \u00b7 ${wifiStatus.signal} dBm` : ''}
               </Text>
             </View>
             <TouchableOpacity
@@ -853,6 +865,25 @@ export default function WiFiManager({ onConnected }) {
       </View>
 
       {/* ── Scan header ── */}
+      {setupWarning && !espConnected && (
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 10,
+          backgroundColor: '#FFF7ED',
+          borderRadius: 12,
+          padding: 12,
+          flexDirection: 'row',
+          gap: 8,
+          borderWidth: 1,
+          borderColor: '#FED7AA',
+        }}>
+          <Ionicons name="wifi-outline" size={16} color="#C2410C" style={{ marginTop: 1 }} />
+          <Text style={{ fontSize: 12, color: '#C2410C', flex: 1, lineHeight: 17 }}>
+            {setupWarning}
+          </Text>
+        </View>
+      )}
+
       <View style={{
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10,
@@ -933,6 +964,23 @@ export default function WiFiManager({ onConnected }) {
             <Text style={{ fontSize: 12, color: '#B91C1C', textAlign: 'center', lineHeight: 18, marginBottom: 16 }}>
               {scanError}
             </Text>
+            <View style={{
+              width: '100%', backgroundColor: '#fff', borderRadius: 12,
+              padding: 12, borderWidth: 1, borderColor: '#FECACA', marginBottom: 14,
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#991B1B', marginBottom: 8 }}>
+                Cek cepat
+              </Text>
+              {SETUP_CHECKLIST.map((item) => (
+                <View key={item} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginBottom: 6 }}>
+                  <Ionicons name="checkmark-circle-outline" size={14} color="#EF4444" style={{ marginTop: 1 }} />
+                  <Text style={{ flex: 1, fontSize: 11, color: '#7F1D1D', lineHeight: 16 }}>{item}</Text>
+                </View>
+              ))}
+              <Text style={{ fontSize: 10, color: '#B91C1C', marginTop: 4 }}>
+                {localIp ? `IP HP saat ini: ${localIp}` : 'IP HP belum terbaca'}
+              </Text>
+            </View>
             <TouchableOpacity
               onPress={doScan}
               style={{ backgroundColor: '#EF4444', borderRadius: 12, paddingHorizontal: 24, paddingVertical: 10 }}

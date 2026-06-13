@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput,
+  ActivityIndicator, Alert, TextInput, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,7 +31,7 @@ const formatElapsed = (sec) => {
 
 const PARAM_META = [
   { key: 'ph', label: 'pH', unit: 'pH', icon: 'water' },
-  { key: 'temperature', label: 'Suhu', unit: '°C', icon: 'thermometer' },
+  { key: 'temperature', label: 'Suhu', unit: '\u00b0C', icon: 'thermometer' },
   { key: 'tds', label: 'TDS', unit: 'ppm', icon: 'flask' },
   { key: 'turbidity', label: 'Kekeruhan', unit: 'NTU', icon: 'eyedrop' },
 ];
@@ -47,6 +47,7 @@ export default function MeasurementScreen({ onBack }) {
   const [step, setStep] = useState('idle');
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [locationInput, setLocationInput] = useState('');
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -126,6 +127,7 @@ export default function MeasurementScreen({ onBack }) {
     setActionLoading(true);
     try {
       await stopMeasurement(code);
+      setShowStopConfirm(false);
       setActiveMeasurement(null);
       setElapsed(0);
       fetchData();
@@ -153,7 +155,7 @@ export default function MeasurementScreen({ onBack }) {
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 18, fontWeight: '700', color: '#fff' }}>Sesi Pengukuran</Text>
             <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
-              {activeMeasurement ? `Aktif · ${activeMeasurement.location || ''}` : 'Tidak ada sesi aktif'}
+              {activeMeasurement ? `Aktif \u00b7 ${activeMeasurement.location || ''}` : 'Tidak ada sesi aktif'}
             </Text>
           </View>
         </View>
@@ -167,7 +169,7 @@ export default function MeasurementScreen({ onBack }) {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
           {step === 'idle' && (
             <TouchableOpacity
-              onPress={activeMeasurement ? handleStop : () => setStep('pick_device')}
+              onPress={activeMeasurement ? () => setShowStopConfirm(true) : () => setStep('pick_device')}
               disabled={actionLoading}
               activeOpacity={0.85}
               style={{
@@ -330,6 +332,83 @@ export default function MeasurementScreen({ onBack }) {
           )}
         </ScrollView>
       )}
+
+      <Modal
+        visible={showStopConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStopConfirm(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.45)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 24,
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 360,
+            backgroundColor: '#fff',
+            borderRadius: 18,
+            padding: 20,
+          }}>
+            <View style={{ alignItems: 'center', marginBottom: 14 }}>
+              <View style={{
+                width: 52, height: 52, borderRadius: 26,
+                backgroundColor: '#FEE2E2',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <Ionicons name="stop-circle" size={28} color="#DC2626" />
+              </View>
+            </View>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3040', textAlign: 'center', marginBottom: 8 }}>
+              Stop sesi pengukuran?
+            </Text>
+            <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 20, marginBottom: 16 }}>
+              Data berikutnya tidak lagi ditandai sebagai sesi aktif.
+            </Text>
+            <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, marginBottom: 16, gap: 5 }}>
+              <Text style={{ fontSize: 12, color: '#6B7280' }}>Lokasi: {activeMeasurement?.location || '-'}</Text>
+              <Text style={{ fontSize: 12, color: '#6B7280' }}>Durasi: {formatElapsed(elapsed)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowStopConfirm(false)}
+                disabled={actionLoading}
+                style={{
+                  flex: 1,
+                  borderWidth: 1.5,
+                  borderColor: '#D1D5DB',
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#6B7280', fontWeight: '700', fontSize: 13 }}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleStop}
+                disabled={actionLoading}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#DC2626',
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                }}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Stop</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

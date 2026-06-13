@@ -18,98 +18,18 @@ import {
 } from '../services/api';
 import { checkESPReachable } from '../services/espDevice';
 import { toUserMessage, logError } from '../utils/errorHandler';
+import {
+  WATER_UNITS,
+  buildHistory as buildHistoryFromSensor,
+  buildOverallData as buildOverallSnapshot,
+  mapSensorToCards as mapSensorCards,
+  parseLocalDate as parseSensorDate,
+  validateThresholdPayload,
+} from '../utils/waterQuality';
+import { loadDashboardSnapshot, saveDashboardSnapshot } from '../utils/dashboardCache';
 import { dashboardStyles as styles } from '../styles/dashboardStyles';
 
 // ─── Helpers ───────────────────────────────────────────────
-const getStatus = (value, min, max) => {
-  if (value == null || min == null || max == null) return 'good';
-  const n = parseFloat(value);
-  if (n < min || n > max) return 'danger';
-  const range = max - min;
-  if (n < min + range * 0.1 || n > max - range * 0.1) return 'warning';
-  return 'good';
-};
-
-const mapWQIStatus = (statusStr) => {
-  if (!statusStr) return 'good';
-  const s = statusStr.toLowerCase();
-  if (s === 'baik') return 'good';
-  if (s === 'sedang') return 'warning';
-  if (s === 'buruk') return 'danger';
-  if (s === 'good' || s === 'warning' || s === 'danger') return s;
-  return 'good';
-};
-
-const mapSensorToCards = (data, threshold) => {
-  const th = threshold || {};
-  return [
-    {
-      id: 1, title: 'pH Level',
-      value: data.ph != null ? String(parseFloat(data.ph).toFixed(1)) : '-',
-      unit: 'pH',
-      status: getStatus(data.ph, th.ph_min ?? 6.5, th.ph_max ?? 8.5),
-      iconName: 'water',
-      range: `${th.ph_min ?? 6.5}–${th.ph_max ?? 8.5}`,
-      accuracy: '±0.1 pH',
-      colors: ['#7CB9D8', '#5AA3C8'],
-    },
-    {
-      id: 2, title: 'Suhu Air',
-      value: data.temperature != null ? String(parseFloat(data.temperature).toFixed(1)) : '-',
-      unit: '°C',
-      status: getStatus(data.temperature, th.temp_min ?? 10, th.temp_max ?? 35),
-      iconName: 'thermometer',
-      range: `${th.temp_min ?? 10}–${th.temp_max ?? 35}°C`,
-      accuracy: '±0.5°C',
-      colors: ['#B8DAE8', '#7CB9D8'],
-    },
-    {
-      id: 3, title: 'Padatan Terlarut',
-      value: data.tds != null ? String(parseFloat(data.tds).toFixed(0)) : '-',
-      unit: 'ppm',
-      status: getStatus(data.tds, th.tds_min ?? 0, th.tds_max ?? 500),
-      iconName: 'flask',
-      range: `${th.tds_min ?? 0}–${th.tds_max ?? 500}`,
-      accuracy: '±10% F.S.',
-      colors: ['#5AA3C8', '#3E8FB8'],
-    },
-    {
-      id: 4, title: 'Kekeruhan',
-      value: data.turbidity != null ? String(parseFloat(data.turbidity).toFixed(1)) : '-',
-      unit: 'NTU',
-      status: getStatus(data.turbidity, th.tss_min ?? 0, th.tss_max ?? 25),
-      iconName: 'eyedrop',
-      range: `${th.tss_min ?? 0}–${th.tss_max ?? 25} NTU`,
-      accuracy: '±85%',
-      colors: ['#7CB9D8', '#5AA3C8'],
-    },
-  ];
-};
-
-const parseLocalDate = (str) => {
-  if (!str) return new Date();
-  const utc = new Date(str);
-  return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
-};
-
-const buildHistory = (list, field, unit, th = {}) =>
-  list.map((item) => {
-    const fieldMap = {
-      ph: [th.ph_min ?? 6.5, th.ph_max ?? 8.5],
-      temperature: [th.temp_min ?? 10, th.temp_max ?? 35],
-      tds: [th.tds_min ?? 0, th.tds_max ?? 500],
-      turbidity: [th.tss_min ?? 0, th.tss_max ?? 25],
-    };
-    const [min, max] = fieldMap[field] ?? [null, null];
-    return {
-      timestamp: parseLocalDate(item.created_at),
-      value: parseFloat(item[field]).toFixed(field === 'tds' ? 0 : 1),
-      unit,
-      status: getStatus(item[field], min, max),   // ← pakai helper yang sudah ada
-      location: item.session_location || item.location || null,
-    };
-  });
-
 const SEVERITY_BG = { low: '#FEF3C7', medium: '#FED7AA', high: '#FEE2E2', critical: '#FECACA' };
 const SEVERITY_TEXT = { low: '#92400E', medium: '#C2410C', high: '#991B1B', critical: '#7F1D1D' };
 const SEVERITY_LABEL = { low: 'Rendah', medium: 'Sedang', high: 'Tinggi', critical: 'Kritis' };
@@ -119,6 +39,35 @@ const GRID_PADDING = 16;
 const GRID_GAP = 10;
 const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
+
+const LoadingSkeleton = () => (
+  <View style={{ padding: 16, gap: 12 }}>
+    <View style={{
+      height: 118, borderRadius: 16, backgroundColor: '#DDEFF7',
+      borderWidth: 1, borderColor: '#C5DDE8',
+    }} />
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <View
+          key={i}
+          style={{ flex: 1, height: 56, borderRadius: 12, backgroundColor: '#EAF4FB', borderWidth: 1, borderColor: '#D4E8F2' }}
+        />
+      ))}
+    </View>
+    <View style={{ height: 46, borderRadius: 12, backgroundColor: '#DDEFF7' }} />
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ flex: 1, height: 154, borderRadius: 16, backgroundColor: '#DDEFF7' }} />
+      <View style={{ flex: 1, height: 154, borderRadius: 16, backgroundColor: '#DDEFF7' }} />
+    </View>
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ flex: 1, height: 154, borderRadius: 16, backgroundColor: '#DDEFF7' }} />
+      <View style={{ flex: 1, height: 154, borderRadius: 16, backgroundColor: '#DDEFF7' }} />
+    </View>
+    <Text style={{ alignSelf: 'center', color: '#8BAFC0', fontSize: 12, marginTop: 4 }}>
+      Memuat data sensor...
+    </Text>
+  </View>
+);
 
 // ─── Parameter Card ────────────────────────────────────────
 // ─── Dashboard ─────────────────────────────────────────────
@@ -164,8 +113,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [alerts, setAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [threshold, setThreshold] = useState(null);
-  const [lastAlertTime, setLastAlertTime] = useState({});
-  const lastAlertTimeRef = useRef({});
 
   // Measurement Session
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -182,6 +129,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const [showTour, setShowTour] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
+  const [cachedAt, setCachedAt] = useState(null);
   const toastTimeout = useRef(null);
   const refWQI = useRef(null);
   const refStats = useRef(null);
@@ -192,6 +141,48 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const refSettingBtn = useRef(null);
   const scrollRef = useRef(null);
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
+
+  const applyDashboardSnapshot = useCallback((snapshot) => {
+    const {
+      latest = {},
+      list = [],
+      statsData = {},
+      alertList = [],
+      th = {},
+      devicesList = [],
+      measurementSessions = [],
+    } = snapshot || {};
+
+    const active = measurementSessions.find((s) => s.status === 'active') || null;
+    setThreshold(th);
+    setActiveMeasurement(active);
+    setMeasurementsList(measurementSessions);
+    setDevices(devicesList);
+
+    const latestDevice = devicesList.find((device) => (
+      (latest.device_id != null && device.id === latest.device_id)
+      || (latest.device_code && device.device_code === latest.device_code)
+      || (latest.device?.device_code && device.device_code === latest.device.device_code)
+    ));
+    setSensorDeviceStatus(
+      latestDevice?.status || (devicesList.some((d) => d.status === 'active') ? 'active' : 'inactive')
+    );
+
+    const zonesFromDevices = devicesList.map((d) => d.location).filter(Boolean);
+    const zonesFromHistory = list.map((item) => item.session_location || item.location).filter(Boolean);
+    const zonesFromMeasurements = measurementSessions.map((item) => item.location).filter(Boolean);
+    setAllZones([...new Set([...zonesFromDevices, ...zonesFromHistory, ...zonesFromMeasurements])].sort());
+
+    setQualityData(mapSensorCards(latest, th));
+    setHistoryList(list);
+    setStats(statsData);
+    setAlerts(alertList);
+
+    setUnreadCount(alertList.filter((a) => !a.is_read).length);
+
+    setOverallData(buildOverallSnapshot(latest, list));
+    setLastUpdated(parseSensorDate(latest.created_at || snapshot?.cachedAt));
+  }, []);
 
   // ─── Fetch data ──────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -230,67 +221,30 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         // Indikator offline tidak boleh membuat dashboard gagal dimuat.
       }
 
-      const latestDevice = devicesList.find((device) => (
-        (latest.device_id != null && device.id === latest.device_id)
-        || (latest.device_code && device.device_code === latest.device_code)
-        || (latest.device?.device_code && device.device_code === latest.device.device_code)
-      ));
-      setSensorDeviceStatus(
-        latestDevice?.status || (devicesList.some((d) => d.status === 'active') ? 'active' : 'inactive')
-      );
-
-      const zonesFromDevices = devicesList
-        .map((d) => d.location)
-        .filter(Boolean);
-      const zonesFromHistory = list
-        .map((item) => item.session_location || item.location)
-        .filter(Boolean);
-      const zonesFromMeasurements = measurementSessions
-        .map((item) => item.location)
-        .filter(Boolean);
-      setAllZones([...new Set([...zonesFromDevices, ...zonesFromHistory, ...zonesFromMeasurements])].sort());
-
-      setQualityData(mapSensorToCards(latest, th));
-      setHistoryList(list);
-      setStats(statsData);
-      setAlerts(alertList);
-
-      const ALERT_THROTTLE_MS = 5 * 60 * 1000;
-      const now = Date.now();
-      const currentLastAlertTime = lastAlertTimeRef.current;
-      const filteredAlerts = alertList.filter((a) => {
-        const lastTime = currentLastAlertTime[a.parameter];
-        return !lastTime || (now - lastTime) > ALERT_THROTTLE_MS;
-      });
-      const newLastAlertTime = { ...currentLastAlertTime };
-      filteredAlerts.forEach((a) => { newLastAlertTime[a.parameter] = now; });
-      lastAlertTimeRef.current = newLastAlertTime;
-      setLastAlertTime(newLastAlertTime);
-      setUnreadCount(filteredAlerts.filter((a) => !a.is_read).length);
-
-      const backendScore = latest.wqi_score != null ? Math.round(latest.wqi_score) : null;
-      const backendStatus = mapWQIStatus(latest.wqi_status);
-
-      setOverallData({
-        id: 0,
-        title: 'Kualitas Air',
-        value: backendScore != null ? String(backendScore) : '-',
-        unit: 'Skor',
-        status: backendStatus,
-        colors: ['#4ADE80', '#22C55E'],
-        color: ['#4ADE80', '#22C55E'],
-        history: list.map((item) => ({
-          timestamp: parseLocalDate(item.created_at),
-          value: item.wqi_score != null ? Math.round(item.wqi_score) : '-',
-          unit: 'Skor',
-          status: mapWQIStatus(item.wqi_status),
-          location: item.session_location || item.location || null,
-        })),
-      });
-
-      setLastUpdated(parseLocalDate(latest.created_at));
+      const snapshot = {
+        latest,
+        list,
+        statsData,
+        alertList,
+        th,
+        devicesList,
+        measurementSessions,
+      };
+      applyDashboardSnapshot(snapshot);
+      setUsingCachedData(false);
+      setCachedAt(null);
+      await saveDashboardSnapshot(snapshot);
     } catch (err) {
       logError('Dashboard.fetchData', err);
+      const cached = await loadDashboardSnapshot();
+      if (cached) {
+        applyDashboardSnapshot(cached);
+        setUsingCachedData(true);
+        setCachedAt(parseSensorDate(cached.cachedAt));
+        setError(`${toUserMessage(err, 'Gagal memuat data sensor')} Menampilkan data terakhir yang tersimpan.`);
+        return;
+      }
+
       // Kalau backend tidak jawab tapi ESP32 di jangkauan, arahkan user ke WiFi setup.
       const espReachable = await checkESPReachable({ retries: 1, delayMs: 600 });
       if (espReachable) {
@@ -302,7 +256,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       setLoading(false);
       setRefreshing(false);
     }
-  }, [onNavigateToWifi]);
+  }, [applyDashboardSnapshot, onNavigateToWifi]);
 
   useEffect(() => {
     fetchData();
@@ -469,6 +423,11 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       for (const [k, v] of Object.entries(payload)) {
         if (isNaN(v)) throw new Error(`Nilai "${k}" tidak valid`);
       }
+      const validationError = validateThresholdPayload(payload);
+      if (validationError) {
+        setThresholdMsg({ type: 'err', text: validationError });
+        return;
+      }
       await updateThreshold(payload);
       setThresholdMsg({ type: 'ok', text: 'Threshold berhasil diperbarui!' });
       fetchData();
@@ -524,6 +483,15 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     }
   };
 
+  const validateDeviceCode = (code) => {
+    if (!code) return 'Kode device tidak boleh kosong';
+    if (code.length < 3) return 'Kode device minimal 3 karakter';
+    if (!/^[a-zA-Z0-9_-]+$/.test(code)) {
+      return 'Kode device hanya boleh memakai huruf, angka, dash, atau underscore';
+    }
+    return null;
+  };
+
   const handleSaveDeviceLocation = async (deviceId) => {
     const loc = editingLocation[deviceId]?.trim();
     if (!loc) {
@@ -553,12 +521,12 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const getHistoryForParam = (id) => {
     const map = {
       1: ['ph', 'pH'],
-      2: ['temperature', '°C'],
+      2: ['temperature', WATER_UNITS.temperature],
       3: ['tds', 'ppm'],
       4: ['turbidity', 'NTU'],
     };
     const [field, unit] = map[id] || [];
-    return buildHistory(historyList, field, unit, threshold);
+    return buildHistoryFromSensor(historyList, field, unit, threshold);
   };
 
   const selectedData = qualityData.find((d) => d.id === selectedParameter);
@@ -577,6 +545,16 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     const diffDay = Math.floor(diffHour / 24);
     if (diffDay < 7) return `${diffDay} hari lalu`;
     return lastUpdated.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const formatCachedAt = () => {
+    if (!cachedAt) return 'waktu tidak diketahui';
+    return cachedAt.toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const formatElapsed = (sec) => {
@@ -599,7 +577,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
   const THRESHOLD_FIELDS = [
     { label: 'pH', minKey: 'ph_min', maxKey: 'ph_max' },
-    { label: 'Suhu (°C)', minKey: 'temp_min', maxKey: 'temp_max' },
+    { label: `Suhu (${WATER_UNITS.temperature})`, minKey: 'temp_min', maxKey: 'temp_max' },
     { label: 'TDS (ppm)', minKey: 'tds_min', maxKey: 'tds_max' },
     { label: 'Kekeruhan / TSS (NTU)', minKey: 'tss_min', maxKey: 'tss_max' },
   ];
@@ -658,8 +636,32 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>Gagal mengambil data: {error}</Text>
           <TouchableOpacity onPress={fetchData}>
-            <Text style={styles.errorRetry}>Coba lagi →</Text>
+            <Text style={styles.errorRetry}>Coba lagi {'\u2192'}</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {usingCachedData && (
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: error ? -6 : 12,
+          marginBottom: 10,
+          backgroundColor: '#FFF7ED',
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: '#FED7AA',
+          padding: 11,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <Ionicons name="cloud-offline-outline" size={16} color="#C2410C" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#9A3412' }}>Data terakhir tersimpan</Text>
+            <Text style={{ fontSize: 11, color: '#C2410C', marginTop: 1 }}>
+              Snapshot {formatCachedAt()} - tarik untuk mencoba data live.
+            </Text>
+          </View>
         </View>
       )}
 
@@ -677,10 +679,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       )}
 
       {loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#7CB9D8" />
-          <Text style={styles.loadingText}>Memuat data sensor...</Text>
-        </View>
+        <LoadingSkeleton />
       ) : (
         <>
           <View ref={refWQI} style={styles.statusSection}>
@@ -701,7 +700,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                 },
                 {
                   label: 'Avg Suhu',
-                  value: stats.avg_temperature != null ? `${parseFloat(stats.avg_temperature).toFixed(1)}°C` : '-',
+                  value: stats.avg_temperature != null ? `${parseFloat(stats.avg_temperature).toFixed(1)}${WATER_UNITS.temperature}` : '-',
                 },
                 {
                   label: 'Avg ppm',
@@ -1003,7 +1002,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   </View>
                   <Text style={{ fontSize: 13, color: '#374151', lineHeight: 18 }}>{alert.message}</Text>
                   <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
-                    Nilai: {alert.value} | Batas: {alert.threshold_min}–{alert.threshold_max}
+                    Nilai: {alert.value} | Batas: {alert.threshold_min}{'\u2013'}{alert.threshold_max}
                   </Text>
                   <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>
                     {new Date(alert.created_at.replace('Z', '')).toLocaleString('id-ID')}
@@ -1301,15 +1300,17 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
                   <TouchableOpacity
                     onPress={async () => {
-                      if (!newDeviceCode.trim()) {
-                        setDeviceMsg({ type: 'err', text: 'Kode device tidak boleh kosong' });
+                      const code = newDeviceCode.trim();
+                      const codeError = validateDeviceCode(code);
+                      if (codeError) {
+                        setDeviceMsg({ type: 'err', text: codeError });
                         return;
                       }
                       setAddingDevice(true);
                       setDeviceMsg(null);
                       try {
                         await createDevice({
-                          device_code: newDeviceCode.trim(),
+                          device_code: code,
                           location: newDeviceLocation.trim(),
                         });
                         setDeviceMsg({ type: 'ok', text: 'Device berhasil ditambahkan!' });
@@ -1422,8 +1423,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                     <TouchableOpacity
                       onPress={async () => {
                         const code = editingDeviceCode.trim();
-                        if (!code) {
-                          setDeviceMsg({ type: 'err', text: 'Nama device tidak boleh kosong' });
+                        const codeError = validateDeviceCode(code);
+                        if (codeError) {
+                          setDeviceMsg({ type: 'err', text: codeError });
                           return;
                         }
                         setDeviceSaving(`${selectedDevice.id}_code`);

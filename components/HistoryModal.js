@@ -33,7 +33,7 @@ const toWibDate = (value) => {
 const HISTORY_FIELD = {
   0: { field: 'wqi_score', unit: 'Skor' },
   1: { field: 'ph', unit: 'pH' },
-  2: { field: 'temperature', unit: '°C' },
+  2: { field: 'temperature', unit: '\u00b0C' },
   3: { field: 'tds', unit: 'ppm' },
   4: { field: 'turbidity', unit: 'NTU' },
 };
@@ -530,9 +530,9 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
                 {startDate && endDate
-                  ? `Tampilkan ${formatSelected(startDate)} – ${formatSelected(endDate)}${activeZone ? ` · ${activeZone}` : ''}`
+                  ? `Tampilkan ${formatSelected(startDate)} \u2013 ${formatSelected(endDate)}${activeZone ? ` \u00b7 ${activeZone}` : ''}`
                   : startDate
-                    ? `Tampilkan dari ${formatSelected(startDate)}${activeZone ? ` · ${activeZone}` : ''}`
+                    ? `Tampilkan dari ${formatSelected(startDate)}${activeZone ? ` \u00b7 ${activeZone}` : ''}`
                     : activeZone
                       ? `Tampilkan zona: ${activeZone}`
                       : 'Pilih filter dulu'}
@@ -571,6 +571,7 @@ export default function HistoryModal({
   const [displayHistory, setDisplayHistory] = useState(history);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const statusConfig = {
     good: { bg: '#DCFCE7', color: '#166534', label: 'Normal' },
@@ -704,7 +705,7 @@ export default function HistoryModal({
 
     if (zone) parts.push(zone);
 
-    return parts.join(' · ') || null;
+    return parts.join(' \u00b7 ') || null;
   };
 
   // ─── Build CSV string ───────────────────────────────────
@@ -825,6 +826,8 @@ export default function HistoryModal({
 
   // ─── Export CSV ─────────────────────────────────────────
   const handleExport = async () => {
+    if (exportLoading) return;
+    setExportLoading(true);
     try {
       const fileName = buildExportFileName();
       const csvContent = await fetchBackendCSV();
@@ -848,10 +851,14 @@ export default function HistoryModal({
     } catch (err) {
       logError('HistoryModal.export', err);
       Alert.alert('Export Gagal', `Tidak dapat mengekspor data.\n${err.message}`);
+    } finally {
+      setExportLoading(false);
     }
   };
 
   const handleExportWeb = async () => {
+    if (exportLoading) return;
+    setExportLoading(true);
     try {
       const fileName = buildExportFileName();
       const csvContent = await fetchBackendCSV();
@@ -870,6 +877,8 @@ export default function HistoryModal({
     } catch (err) {
       logError('HistoryModal.exportWeb', err);
       Alert.alert('Export Gagal', 'Tidak dapat mengekspor data.');
+    } finally {
+      setExportLoading(false);
     }
   };
   // Reset quick zone ketika filter modal berubah
@@ -902,8 +911,8 @@ export default function HistoryModal({
               <Text style={styles.headerSubtitle}>
                 {filteredHistory.length} data
                 {(isFiltered || quickZone)
-                  ? ` · ${[filterLabel(), quickZone].filter(Boolean).join(' · ')}`
-                  : ' · 3 bulan terakhir'}
+                  ? ` \u00b7 ${[filterLabel(), quickZone].filter(Boolean).join(' \u00b7 ')}`
+                  : ' \u00b7 3 bulan terakhir'}
               </Text>
               {filteredHistory.length > 1 && (
                 <View style={{ marginTop: 8, opacity: 0.85 }}>
@@ -934,8 +943,13 @@ export default function HistoryModal({
 
               <TouchableOpacity
                 onPress={Platform.OS === 'web' ? handleExportWeb : handleExport}
-                style={styles.headerBtn}>
-                <Ionicons name="download-outline" size={18} color="#fff" />
+                disabled={exportLoading}
+                style={[styles.headerBtn, exportLoading && { opacity: 0.65 }]}>
+                {exportLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="download-outline" size={18} color="#fff" />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={onClose} style={styles.headerBtn}>

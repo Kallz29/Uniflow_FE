@@ -36,9 +36,27 @@ export default function ParameterCard({ item, width, onPress, deviceStatus }) {
           <Text style={styles.paramCardValue}>{item.value}</Text>
           <Text style={styles.paramCardUnit}>{item.unit}</Text>
         </View>
+        {item.calibrationHint && (
+          <View style={{
+            marginTop: 7,
+            alignSelf: 'flex-start',
+            backgroundColor: 'rgba(255,255,255,0.22)',
+            borderRadius: 8,
+            paddingHorizontal: 7,
+            paddingVertical: 3,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+          }}>
+            <Ionicons name="construct-outline" size={10} color="#fff" />
+            <Text style={{ fontSize: 9, color: '#fff', fontWeight: '700' }}>
+              {item.calibrationHint}
+            </Text>
+          </View>
+        )}
       </LinearGradient>
       <View style={[styles.paramCardBottom, { backgroundColor: item.colors[1] + 'CC' }]}>
-        <Text style={styles.paramCardRange}>{item.range}</Text>
+        <Text style={styles.paramCardRange}>{item.anomaly || item.range}</Text>
       </View>
     </TouchableOpacity>
   );

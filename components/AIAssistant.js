@@ -18,7 +18,7 @@ const stripMarkdown = (text) => {
   return text
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
-    .replace(/^[\*\-] /gm, '• ')
+    .replace(/^[\*\-] /gm, '\u2022 ')
     .replace(/#+\s/g, '')
     .replace(/`(.+?)`/g, '$1')
     .trim();
