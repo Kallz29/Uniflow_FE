@@ -19,7 +19,8 @@ const STEPS = [
     id: 'welcome',
     title: 'Selamat datang di UniFlow!',
     desc: 'Aplikasi monitoring kualitas air real-time kampus Telkom University. Mari kenalan dulu.',
-    refKey: 'refHeader',
+    refKey: null,
+    noHighlight: true,
     icon: 'water',
     scrollY: 0,
   },
@@ -83,7 +84,8 @@ const STEPS = [
     id: 'done',
     title: 'Siap digunakan!',
     desc: 'Tour bisa diulang kapan saja dari Pengaturan > Panduan Aplikasi.',
-    refKey: 'refHeader',
+    refKey: null,
+    noHighlight: true,
     icon: 'checkmark-circle',
     scrollY: 0,
   },
@@ -165,7 +167,7 @@ const Spotlight = ({ highlight, screenWidth, screenHeight }) => {
   );
 };
 
-export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
+export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrollY = 0 }) {
   const window = useWindowDimensions();
   const [step, setStep] = useState(0);
   const [highlight, setHighlight] = useState(null);
@@ -176,11 +178,35 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
   const current = STEPS[step];
   const isCompact = window.width < 430 || window.height < 720;
 
-  const measureStep = useCallback((refKey, runId = measureRunId.current, commit = true) => {
+  const getLayoutHighlight = useCallback((refKey, scrollPosition = scrollY) => {
+    if (current.noHighlight) return null;
+
+    const layout = refs[refKey]?.layout;
+    if (!layout) return getFallbackHighlight(current.id, window);
+
+    const width = Math.min(layout.width, window.width - SCREEN_MARGIN * 2);
+    const height = Math.min(layout.height, window.height - SCREEN_MARGIN * 2);
+
+    return {
+      top: clamp(layout.y - scrollPosition, SCREEN_MARGIN, window.height - height - SCREEN_MARGIN),
+      left: clamp(layout.x, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN),
+      width,
+      height,
+    };
+  }, [current.id, current.noHighlight, refs, scrollY, window]);
+
+  const measureStep = useCallback((refKey, runId = measureRunId.current, commit = true, scrollPosition = scrollY) => {
+    if (current.noHighlight) {
+      setHighlight(null);
+      setMeasuring(false);
+      return;
+    }
+
+    const layoutHighlight = getLayoutHighlight(refKey, scrollPosition);
     const fallback = getFallbackHighlight(current.id, window);
 
     if (!refKey || !refs[refKey]?.current) {
-      setHighlight(fallback);
+      setHighlight(layoutHighlight || fallback);
       setMeasuring(false);
       return;
     }
@@ -191,7 +217,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
       if (!width || !height) {
         if (commit) {
-          setHighlight(fallback);
+          setHighlight(layoutHighlight || fallback);
           setMeasuring(false);
         }
         return;
@@ -210,15 +236,25 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       setMeasuring(false);
     };
 
+    if (layoutHighlight) {
+      if (commit) {
+        setHighlight(layoutHighlight);
+        setMeasuring(false);
+      }
+      return;
+    }
+
     if (typeof node.measureInWindow === 'function') {
       node.measureInWindow((left, top, width, height) => onMeasure(left, top, width, height));
       return;
     }
 
     node.measure((_x, _y, width, height, pageX, pageY) => onMeasure(pageX, pageY, width, height));
-  }, [current.id, refs, window.height, window.width]);
+  }, [current.id, current.noHighlight, getLayoutHighlight, refs, scrollY, window]);
 
   const getTargetScrollY = useCallback(() => {
+    if (current.noHighlight) return 0;
+
     const layout = refs[current.refKey]?.layout;
     if (!layout) return current.scrollY ?? 0;
 
@@ -227,7 +263,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       : Math.max(16, window.height * 0.12);
 
     return Math.max(0, layout.y - desiredTop);
-  }, [current.id, current.refKey, current.scrollY, refs, window.height]);
+  }, [current.id, current.noHighlight, current.refKey, current.scrollY, refs, window.height]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -248,17 +284,18 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
     const runId = measureRunId.current;
     const timers = [];
     setMeasuring(true);
-    setHighlight(getFallbackHighlight(current.id, window));
+    setHighlight(current.noHighlight ? null : getLayoutHighlight(current.refKey));
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (runId !== measureRunId.current) return;
 
+      const targetScrollY = getTargetScrollY();
       if (scrollRef?.current) {
-        scrollRef.current.scrollTo({ y: getTargetScrollY(), animated: false });
+        scrollRef.current.scrollTo({ y: targetScrollY, animated: false });
       }
 
       MEASURE_DELAYS.forEach((delay, index) => {
         const isLastMeasure = index === MEASURE_DELAYS.length - 1;
-        const timer = setTimeout(() => measureStep(current.refKey, runId, isLastMeasure), delay);
+        const timer = setTimeout(() => measureStep(current.refKey, runId, isLastMeasure, targetScrollY), delay);
         timers.push(timer);
       });
     });
@@ -267,11 +304,11 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
       timers.forEach(clearTimeout);
       interaction?.cancel?.();
     };
-  }, [step, visible, current.id, current.refKey, current.scrollY, getTargetScrollY, measureStep, scrollRef, window.height, window.width]);
+  }, [step, visible, current.id, current.noHighlight, current.refKey, current.scrollY, getLayoutHighlight, getTargetScrollY, measureStep, scrollRef, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
-    if (!current.refKey) setHighlight(getFallbackHighlight(current.id, window));
+    if (!current.refKey || current.noHighlight) setHighlight(null);
     setMeasuring(false);
     return undefined;
   }, [current.id, current.refKey, visible, window.height, window.width]);
@@ -331,7 +368,7 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef }) {
 
   if (!visible) return null;
 
-  const activeHighlight = highlight || getFallbackHighlight(current.id, window);
+  const activeHighlight = current.noHighlight ? null : (highlight || getFallbackHighlight(current.id, window));
 
   return (
     <Modal visible transparent animationType="none">

@@ -168,6 +168,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   const refSettingBtn = useRef(null);
   const refHeader = useRef(null);
   const scrollRef = useRef(null);
+  const [tourScrollY, setTourScrollY] = useState(0);
   const [tourLayouts, setTourLayouts] = useState({});
   const { shouldShowTour, tourChecked, resetTour } = useShouldShowTour();
 
@@ -187,6 +188,35 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       return { ...prev, [key]: { x, y, width, height } };
     });
   }, []);
+
+  const insetTourLayout = useCallback((key, insetX = 0, insetY = 0, insetBottom = 0) => {
+    const layout = tourLayouts[key];
+    if (!layout) return undefined;
+
+    return {
+      x: layout.x + insetX,
+      y: layout.y + insetY,
+      width: Math.max(1, layout.width - insetX * 2),
+      height: Math.max(1, layout.height - insetY - insetBottom),
+    };
+  }, [tourLayouts]);
+
+  const getHeaderIconTourLayout = useCallback((index) => {
+    const header = tourLayouts.refHeader;
+    if (!header) return undefined;
+
+    const iconSize = 36;
+    const gap = 8;
+    const rightPadding = 20;
+    const iconCount = 4;
+    const iconsWidth = iconSize * iconCount + gap * (iconCount - 1);
+    return {
+      x: SCREEN_W - rightPadding - iconsWidth + index * (iconSize + gap),
+      y: header.y + 52 + 4,
+      width: iconSize,
+      height: iconSize,
+    };
+  }, [tourLayouts.refHeader]);
 
   const applyDashboardSnapshot = useCallback((snapshot) => {
     const {
@@ -674,6 +704,8 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       ref={scrollRef}
       style={styles.container}
       showsVerticalScrollIndicator={false}
+      onScroll={(event) => setTourScrollY(event.nativeEvent.contentOffset.y)}
+      scrollEventThrottle={16}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7CB9D8" />}
     >
       {/* ── Header ── */}
@@ -1819,15 +1851,16 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
         onDone={() => setShowTour(false)}
         refs={{
           refHeader: { current: refHeader.current, layout: tourLayouts.refHeader },
-          refWQI: { current: refWQI.current, layout: tourLayouts.refWQI },
-          refStats: { current: refStats.current, layout: tourLayouts.refStats },
-          refParams: { current: refParams.current, layout: tourLayouts.refParams },
-          refStartBtn: { current: refStartBtn.current, layout: tourLayouts.refStartBtn },
-          refNotifBtn: { current: refNotifBtn.current, layout: tourLayouts.refNotifBtn },
-          refAI: { current: refAI.current, layout: tourLayouts.refAI },
-          refSettingBtn: { current: refSettingBtn.current, layout: tourLayouts.refSettingBtn },
+          refWQI: { current: refWQI.current, layout: insetTourLayout('refWQI', 16) },
+          refStats: { current: refStats.current, layout: insetTourLayout('refStats', 16) },
+          refParams: { current: refParams.current, layout: insetTourLayout('refParams', 16) },
+          refStartBtn: { current: refStartBtn.current, layout: insetTourLayout('refStartBtn', 16) },
+          refNotifBtn: { current: refNotifBtn.current, layout: getHeaderIconTourLayout(0) },
+          refAI: { current: refAI.current, layout: getHeaderIconTourLayout(2) },
+          refSettingBtn: { current: refSettingBtn.current, layout: getHeaderIconTourLayout(3) },
         }}
         scrollRef={scrollRef}
+        scrollY={tourScrollY}
       />
     </ScrollView>
   );
