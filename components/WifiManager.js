@@ -193,11 +193,23 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
   const [error,        setError]        = useState(null);
   const [countdown,    setCountdown]    = useState(0);
   const slideAnim = useRef(new Animated.Value(300)).current;
-  const pollRef   = useRef(null);
+  const pollRef = useRef(null);
+  const countdownRef = useRef(null);
+  const redirectRef = useRef(null);
   const startedAt = useRef(0);
+
+  const clearConnectTimers = useCallback(() => {
+    clearInterval(pollRef.current);
+    clearInterval(countdownRef.current);
+    clearTimeout(redirectRef.current);
+    pollRef.current = null;
+    countdownRef.current = null;
+    redirectRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (visible) {
+      clearConnectTimers();
       setSsid(network?.ssid || '');
       setPassword('');
       setError(null);
@@ -207,22 +219,27 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
       Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 12, useNativeDriver: true }).start();
     } else {
       slideAnim.setValue(300);
-      clearInterval(pollRef.current);
+      clearConnectTimers();
     }
-    return () => clearInterval(pollRef.current);
-  }, [visible]);
+    return clearConnectTimers;
+  }, [visible, network?.ssid, clearConnectTimers]);
 
   // Poll status ESP32 setelah kirim connect request
   const startPolling = useCallback((targetSsid) => {
+    clearConnectTimers();
     startedAt.current = Date.now();
     setPhase('waiting');
     setStatusMsg(`Menunggu ESP32 terhubung ke "${targetSsid}"...`);
     setCountdown(Math.ceil(CONNECT_POLL_TIMEOUT / 1000));
 
     // Countdown visual
-    const countdownRef = setInterval(() => {
+    countdownRef.current = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { clearInterval(countdownRef); return 0; }
+        if (prev <= 1) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+          return 0;
+        }
         return prev - 1;
       });
     }, 1000);
@@ -233,8 +250,7 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
 
       // Timeout — ESP32 tidak berhasil connect dalam waktu yang ditentukan
       if (elapsed >= CONNECT_POLL_TIMEOUT) {
-        clearInterval(pollRef.current);
-        clearInterval(countdownRef);
+        clearConnectTimers();
         setPhase('error');
         setError(
           `ESP32 belum terhubung ke "${targetSsid}" setelah ${CONNECT_POLL_TIMEOUT / 1000} detik.\n\n` +
@@ -250,18 +266,22 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
         const status = await getWifiStatus();
         if (status?.connected && status?.ssid === targetSsid) {
           clearInterval(pollRef.current);
-          clearInterval(countdownRef);
+          clearInterval(countdownRef.current);
+          pollRef.current = null;
+          countdownRef.current = null;
           setPhase('done');
           setStatusMsg(`Berhasil! ESP32 terhubung ke "${targetSsid}"`);
           // Delay singkat agar user sempat lihat pesan success, lalu redirect
-          setTimeout(() => onSuccess(targetSsid), 800);
+          redirectRef.current = setTimeout(() => onSuccess(targetSsid), 800);
         } else if (status?.connected && status?.ssid !== targetSsid) {
           // Sudah connected tapi ke SSID berbeda — mungkin fallback ke saved WiFi
           clearInterval(pollRef.current);
-          clearInterval(countdownRef);
+          clearInterval(countdownRef.current);
+          pollRef.current = null;
+          countdownRef.current = null;
           setPhase('done');
           setStatusMsg(`ESP32 terhubung ke "${status.ssid}"`);
-          setTimeout(() => onSuccess(status.ssid), 800);
+          redirectRef.current = setTimeout(() => onSuccess(status.ssid), 800);
         }
         // Kalau belum connected, tunggu interval berikutnya
       } catch {
@@ -277,7 +297,7 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
         }
       }
     }, CONNECT_POLL_INTERVAL);
-  }, [onSuccess]);
+  }, [clearConnectTimers, onSuccess]);
 
   const handleConnect = async () => {
     const targetSsid = ssid.trim();
@@ -306,7 +326,7 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
   };
 
   const handleClose = () => {
-    clearInterval(pollRef.current);
+    clearConnectTimers();
     onClose();
   };
 
@@ -519,7 +539,7 @@ const ConnectModal = ({ visible, network, onClose, onSuccess }) => {
 
                 {/* Tombol ke Dashboard tetap tersedia walau gagal */}
                 <TouchableOpacity
-                  onPress={() => { clearInterval(pollRef.current); onSuccess(null); }}
+                  onPress={() => { clearConnectTimers(); onSuccess(null); }}
                   activeOpacity={0.85}
                   style={{
                     borderWidth: 1.5, borderColor: '#7CB9D8',
@@ -590,10 +610,7 @@ export default function WiFiManager({ onConnected }) {
   const pingESP = useCallback(async () => {
     try {
       // Ping ringan — hanya butuh response apa saja
-      await fetch(`http://${ESP_IP}/api/wifi/status?_=${Date.now()}`, {
-        headers: { Connection: 'close', Accept: 'application/json' },
-        signal: AbortSignal.timeout(1500),
-      });
+      await espFetch(`/status?_=${Date.now()}`, {}, 1500);
     } catch {
       // Abaikan error — tujuan hanya keep-alive, bukan baca data
     }

@@ -58,6 +58,7 @@ export const request = async (path, opts = {}, cfg = {}) => {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     tag = 'api',
     fallbackErrorMsg,
+    accept = 'application/json',
   } = cfg;
 
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
@@ -69,7 +70,7 @@ export const request = async (path, opts = {}, cfg = {}) => {
     const res = await fetch(url, {
       ...opts,
       headers: {
-        Accept: 'application/json',
+        Accept: accept,
         ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
         ...(opts.headers || {}),
       },

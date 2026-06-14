@@ -67,6 +67,14 @@ export const exportSensorCSV = (params = {}) => {
   return `${BASE_URL}/sensors/export/csv${qs ? `?${qs}` : ''}`;
 };
 
+export const exportSensorCSVContent = (params = {}) =>
+  apiClient.get(exportSensorCSV(params), {
+    tag: 'exportSensorCSV',
+    timeoutMs: 60000,
+    accept: 'text/csv',
+    fallbackErrorMsg: 'Tidak dapat mengekspor data sensor',
+  });
+
 // ============================================
 // ALERTS
 // ============================================

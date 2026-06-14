@@ -14,7 +14,7 @@ import {
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
   updateThreshold, resetThreshold,
   getAllDevices, createDevice, updateDevice, deleteDevice,
-  startMeasurement, stopMeasurement, getMeasurements,
+  getMeasurements,
 } from '../services/api';
 import { checkESPReachable } from '../services/espDevice';
 import { toUserMessage, logError } from '../utils/errorHandler';
@@ -159,11 +159,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   // Measurement Session
   const [activeMeasurement, setActiveMeasurement] = useState(null);
   const [measurementsList, setMeasurementsList] = useState([]);
-  const [measurementLoading, setMeasurementLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [showMeasurementModal, setShowMeasurementModal] = useState(false);
-  const [selectedDeviceForMeasurement, setSelectedDeviceForMeasurement] = useState(null);
-  const [measurementLocation, setMeasurementLocation] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -398,61 +394,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     await fetchData();
     const now = new Date();
     showToast(`Diperbarui ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} WIB`);
-  };
-
-  // Measurement handlers
-  const closeMeasurementModal = () => {
-    setShowMeasurementModal(false);
-    setSelectedDeviceForMeasurement(null);
-    setMeasurementLocation('');
-  };
-
-  const openMeasurementModal = async () => {
-    setShowMeasurementModal(true);
-
-    if (devices.length > 0) return;
-
-    setMeasurementLoading(true);
-    try {
-      const res = await getAllDevices();
-      const list = normalizeDevices(res.data || []);
-      setDevices(list);
-      setEditingLocation(buildEditingLocation(list));
-    } catch (err) {
-      Alert.alert('Gagal', toUserMessage(err, 'Gagal memuat perangkat'));
-    } finally {
-      setMeasurementLoading(false);
-    }
-  };
-
-  const handleStartMeasurement = async (deviceCode) => {
-    setMeasurementLoading(true);
-    try {
-      const res = await startMeasurement(deviceCode);
-      setActiveMeasurement(res.data || res);
-      closeMeasurementModal();
-      fetchData();
-    } catch (err) {
-      Alert.alert('Gagal', toUserMessage(err, 'Gagal memulai sesi pengukuran'));
-    } finally {
-      setMeasurementLoading(false);
-    }
-  };
-
-  const handleStopMeasurement = async () => {
-    if (!activeMeasurement?.device?.device_code && !activeMeasurement?.device_code) return;
-
-    const code = activeMeasurement.device?.device_code || activeMeasurement.device_code;
-    setMeasurementLoading(true);
-    try {
-      await stopMeasurement(code);
-      setActiveMeasurement(null);
-      fetchData();
-    } catch (err) {
-      Alert.alert('Gagal', toUserMessage(err, 'Gagal menghentikan sesi'));
-    } finally {
-      setMeasurementLoading(false);
-    }
   };
 
   // ─── Alert handlers ──────────────────────────────────────
@@ -1781,167 +1722,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       </Modal>
 
       {/* ── History Modals ── */}
-      {/* Modal Pilih Device untuk Start Pengukuran */}
-      <Modal
-        visible={showMeasurementModal}
-        animationType="slide"
-        transparent
-        onRequestClose={closeMeasurementModal}
-      >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 36 }}>
-            <View style={{
-              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-              padding: 16, borderBottomWidth: 1, borderBottomColor: '#EAF4FB',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="radio-button-on" size={18} color="#EF4444" />
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A3040' }}>Mulai Pengukuran</Text>
-              </View>
-              <TouchableOpacity onPress={closeMeasurementModal}>
-                <Ionicons name="close" size={22} color="#8BAFC0" />
-              </TouchableOpacity>
-            </View>
-
-            {selectedDeviceForMeasurement ? (
-              <View style={{ padding: 16 }}>
-                <TouchableOpacity
-                  onPress={() => setSelectedDeviceForMeasurement(null)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 }}
-                >
-                  <Ionicons name="chevron-back" size={16} color="#5AA3C8" />
-                  <Text style={{ fontSize: 12, color: '#5AA3C8', fontWeight: '600' }}>Pilih Perangkat</Text>
-                </TouchableOpacity>
-
-                <View style={{
-                  backgroundColor: '#F0F9FF', borderRadius: 12, padding: 12, marginBottom: 16,
-                  flexDirection: 'row', alignItems: 'center', gap: 10,
-                }}>
-                  <Ionicons name="hardware-chip" size={18} color="#3E8FB8" />
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>
-                    {selectedDeviceForMeasurement.device_code || `Device #${selectedDeviceForMeasurement.id}`}
-                  </Text>
-                </View>
-
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 6 }}>
-                  Lokasi Pengukuran
-                </Text>
-                <Text style={{ fontSize: 11, color: '#8BAFC0', marginBottom: 10, lineHeight: 16 }}>
-                  Masukkan lokasi untuk sesi ini. Data yang masuk akan di-tag dengan lokasi ini.
-                </Text>
-
-                <TextInput
-                  value={measurementLocation}
-                  onChangeText={setMeasurementLocation}
-                  placeholder="Contoh: Asrama, IPAL, Sport Center..."
-                  placeholderTextColor="#B0CFE0"
-                  autoFocus
-                  style={{
-                    borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
-                    padding: 12, fontSize: 14, color: '#1A3040', backgroundColor: '#F9FAFB',
-                    marginBottom: 16,
-                  }}
-                />
-
-                <TouchableOpacity
-                  onPress={async () => {
-                    const loc = measurementLocation.trim();
-                    if (!loc) {
-                      Alert.alert('Lokasi kosong', 'Masukkan lokasi pengukuran dulu.');
-                      return;
-                    }
-
-                    setMeasurementLoading(true);
-                    try {
-                      await updateDevice(selectedDeviceForMeasurement.id, { location: loc });
-                      setDevices((prev) =>
-                        prev.map((d) => d.id === selectedDeviceForMeasurement.id ? { ...d, location: loc } : d)
-                      );
-                      await handleStartMeasurement(selectedDeviceForMeasurement.device_code);
-                    } catch (err) {
-                      Alert.alert('Gagal', toUserMessage(err, 'Gagal memulai sesi'));
-                      setMeasurementLoading(false);
-                    }
-                  }}
-                  disabled={measurementLoading || !measurementLocation.trim()}
-                  activeOpacity={0.85}
-                  style={{
-                    backgroundColor: measurementLocation.trim() ? '#5AA3C8' : '#C5DDE8',
-                    borderRadius: 12, paddingVertical: 13,
-                    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
-                  }}
-                >
-                  {measurementLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <>
-                      <Ionicons name="play-circle" size={18} color="#fff" />
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                        Mulai di {measurementLocation || '...'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={{ padding: 16 }}>
-                <View style={{ backgroundColor: '#FFF7ED', borderRadius: 8, padding: 10, marginBottom: 16, flexDirection: 'row', gap: 6 }}>
-                  <Ionicons name="information-circle-outline" size={14} color="#C2410C" style={{ marginTop: 1 }} />
-                  <Text style={{ fontSize: 11, color: '#C2410C', flex: 1, lineHeight: 16 }}>
-                    Data sensor yang masuk saat sesi aktif akan ditandai dengan sesi ini. Pilih perangkat, lalu isi lokasi pengukuran.
-                  </Text>
-                </View>
-
-                {measurementLoading ? (
-                  <View style={{ padding: 32, alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color="#3E8FB8" />
-                    <Text style={{ color: '#8BAFC0', marginTop: 8, fontSize: 13 }}>Memuat perangkat...</Text>
-                  </View>
-                ) : devices.length === 0 ? (
-                  <View style={{ padding: 32, alignItems: 'center' }}>
-                    <Ionicons name="hardware-chip-outline" size={40} color="#B0CFE0" />
-                    <Text style={{ color: '#8BAFC0', marginTop: 8, fontSize: 13 }}>Tidak ada perangkat terdaftar</Text>
-                  </View>
-                ) : (
-                  devices.map((device) => (
-                    <TouchableOpacity
-                      key={device.id}
-                      onPress={() => {
-                        setSelectedDeviceForMeasurement(device);
-                        setMeasurementLocation(device.location || '');
-                      }}
-                      disabled={measurementLoading}
-                      activeOpacity={0.85}
-                      style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        backgroundColor: '#F0F9FF', borderRadius: 14, padding: 14, marginBottom: 10,
-                        borderWidth: 1.5, borderColor: '#D1E8F5',
-                      }}
-                    >
-                      <View style={{
-                        width: 38, height: 38, borderRadius: 19,
-                        backgroundColor: '#3E8FB8', justifyContent: 'center', alignItems: 'center', marginRight: 12,
-                      }}>
-                        <Ionicons name="hardware-chip" size={18} color="#fff" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#1A3040' }}>
-                          {device.device_code || `Device #${device.id}`}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: '#8BAFC0', marginTop: 2 }}>
-                          {device.location || 'Lokasi belum diatur'}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color="#3E8FB8" />
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
-
       {selectedDataWithHistory && (
         <HistoryModal
           visible

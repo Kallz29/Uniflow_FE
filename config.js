@@ -1,6 +1,6 @@
 // ============================================
 // Konfigurasi Global UniFlow
-// Ganti BASE_URL sesuai IP server backend kamu
+// Sesuaikan BASE_URL dengan alamat server backend yang digunakan.
 // Contoh: 'http://192.168.1.10:3000/api'
 // ============================================
 

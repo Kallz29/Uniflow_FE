@@ -10,7 +10,7 @@ import { logError } from '../utils/errorHandler';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { exportSensorCSV, getAllSensors } from '../services/api';
+import { exportSensorCSVContent, getAllSensors } from '../services/api';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -840,19 +840,15 @@ export default function HistoryModal({
       params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
       const ed = endDate || startDate;
       params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+    } else {
+      params.days = 90;
     }
 
     return params;
   };
 
   const fetchBackendCSV = async () => {
-    const url = exportSensorCSV(buildBackendExportParams());
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
-    }
-
-    const csvContent = await response.text();
+    const csvContent = await exportSensorCSVContent(buildBackendExportParams());
     if (!csvContent || csvContent.trim().length === 0) {
       Alert.alert('Tidak Ada Data', 'Backend tidak mengembalikan data untuk filter ini.');
       return null;
