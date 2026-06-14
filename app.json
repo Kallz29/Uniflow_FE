@@ -4,7 +4,7 @@
     "slug": "uniflow-mobile",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/logo.png",
@@ -17,10 +17,9 @@
       "bundleIdentifier": "com.uniflow.mobile"
     },
     "android": {
-      "usesCleartextTraffic": true,
       "versionCode": 3,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/app-icon.png",
         "backgroundColor": "#7CB9D8"
       },
       "package": "com.uniflow.mobile",

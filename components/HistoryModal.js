@@ -572,7 +572,7 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
                     ? `Tampilkan dari ${formatSelected(startDate)}${activeZone ? ` \u00b7 ${activeZone}` : ''}`
                     : activeZone
                       ? `Tampilkan zona: ${activeZone}`
-                      : 'Pilih filter dulu'}
+                      : 'Tentukan filter untuk melanjutkan'}
               </Text>
             </TouchableOpacity>
           </View>

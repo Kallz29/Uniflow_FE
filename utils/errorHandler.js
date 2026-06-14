@@ -52,7 +52,7 @@ export const toUserMessage = (err, fallback = 'Terjadi kesalahan tak terduga') =
   }
 
   if (isNetworkError(err)) {
-    return 'Tidak dapat terhubung ke server. Periksa koneksi internet kamu.';
+    return 'Tidak dapat terhubung ke server. Periksa koneksi internet perangkat Anda.';
   }
 
   if (err instanceof AppError) return err.message;

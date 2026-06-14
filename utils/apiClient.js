@@ -102,7 +102,7 @@ export const request = async (path, opts = {}, cfg = {}) => {
 
     if (isNetworkError(err)) {
       const appErr = new AppError(
-        'Tidak dapat terhubung ke server. Periksa koneksi internet kamu.',
+        'Tidak dapat terhubung ke server. Periksa koneksi internet perangkat Anda.',
         { code: 'NETWORK', cause: err }
       );
       logError(tag, appErr);

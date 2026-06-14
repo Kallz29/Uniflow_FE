@@ -14,7 +14,24 @@ import { toUserMessage, logError } from '../utils/errorHandler';
 const REFRESH_INTERVAL = 3000;
 const START_COLOR = '#5AA3C8';
 const START_COLOR_DARK = '#3E8FB8';
-const STOP_COLOR_DARK = '#DC2626';
+const STOP_COLOR = '#E11D48';
+const STOP_COLOR_DARK = '#BE123C';
+const RETRY_DELAY_MS = 900;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withRetry = async (fn, attempts = 3) => {
+  let lastErr;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await sleep(RETRY_DELAY_MS);
+    }
+  }
+  throw lastErr;
+};
 
 const parseSessionDate = (str) => {
   if (!str) return new Date();
@@ -43,7 +60,7 @@ const PARAM_META = [
 
 const normalizeDevice = (device) => ({
   ...device,
-  status: device?.status === 'active' && !device?.last_seen ? 'inactive' : (device?.status || 'inactive'),
+  status: device?.status || 'inactive',
 });
 
 export default function MeasurementScreen({ onBack }) {
@@ -102,6 +119,17 @@ export default function MeasurementScreen({ onBack }) {
     return () => clearInterval(iv);
   }, [activeMeasurement?.start_time]);
 
+  const verifyActiveMeasurement = async (deviceCode) => {
+    const measRes = await withRetry(() => getMeasurements(), 2);
+    const sessions = measRes.data || [];
+    const active = sessions.find((s) => {
+      const code = s.device?.device_code || s.device_code;
+      return s.status === 'active' && (!deviceCode || code === deviceCode);
+    }) || sessions.find((s) => s.status === 'active') || null;
+    setActiveMeasurement(active);
+    return active;
+  };
+
   const handleStart = async () => {
     const loc = locationInput.trim();
     if (!loc) {
@@ -119,14 +147,30 @@ export default function MeasurementScreen({ onBack }) {
 
     setActionLoading(true);
     try {
-      await updateDevice(selectedDevice.id, { location: loc });
-      await startMeasurement(selectedDevice.device_code);
+      await withRetry(() => updateDevice(selectedDevice.id, { location: loc }), 2);
+      const res = await withRetry(() => startMeasurement(selectedDevice.device_code), 3);
+      const started = res.data || res;
+      if (started?.status === 'active' || started?.id) setActiveMeasurement(started);
       setStep('idle');
       setSelectedDevice(null);
       setLocationInput('');
-      fetchData();
+      await fetchData();
     } catch (err) {
-      Alert.alert('Gagal', toUserMessage(err, 'Gagal memulai sesi'));
+      try {
+        const active = await verifyActiveMeasurement(selectedDevice.device_code);
+        if (active) {
+          setStep('idle');
+          setSelectedDevice(null);
+          setLocationInput('');
+          return;
+        }
+      } catch (verifyErr) {
+        logError('MeasurementScreen.start.verify', verifyErr);
+      }
+      Alert.alert(
+        'Sesi belum dapat dimulai',
+        toUserMessage(err, 'Koneksi ke server belum stabil. Periksa koneksi internet lalu coba lagi.')
+      );
     } finally {
       setActionLoading(false);
     }
@@ -200,17 +244,33 @@ export default function MeasurementScreen({ onBack }) {
               disabled={actionLoading}
               activeOpacity={0.85}
               style={{
-                backgroundColor: activeMeasurement ? STOP_COLOR_DARK : START_COLOR,
-                borderRadius: 14, paddingVertical: 16,
-                flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10,
+                backgroundColor: activeMeasurement ? STOP_COLOR : START_COLOR,
+                borderRadius: 14,
+                paddingVertical: activeMeasurement ? 13 : 16,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 10,
+                shadowColor: activeMeasurement ? STOP_COLOR_DARK : START_COLOR_DARK,
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.16,
+                shadowRadius: 10,
+                elevation: 3,
               }}
             >
               {actionLoading ? <ActivityIndicator color="#fff" /> : (
                 <>
                   <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={22} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
-                    {activeMeasurement ? 'Stop Sesi' : 'Start Sesi'}
-                  </Text>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16, textAlign: 'center' }}>
+                      {activeMeasurement ? 'Stop Sesi' : 'Start Sesi'}
+                    </Text>
+                    {activeMeasurement && (
+                      <Text style={{ color: 'rgba(255,255,255,0.86)', fontSize: 11, fontWeight: '700', marginTop: 2, textAlign: 'center' }}>
+                        {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi aktif'}
+                      </Text>
+                    )}
+                  </View>
                 </>
               )}
             </TouchableOpacity>
@@ -420,7 +480,7 @@ export default function MeasurementScreen({ onBack }) {
                 disabled={actionLoading}
                 style={{
                   flex: 1,
-                  backgroundColor: '#DC2626',
+                  backgroundColor: STOP_COLOR,
                   borderRadius: 12,
                   paddingVertical: 12,
                   alignItems: 'center',

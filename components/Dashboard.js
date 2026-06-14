@@ -41,6 +41,8 @@ const GRID_PADDING = 16;
 const GRID_GAP = 10;
 const CARD_W = Math.floor((SCREEN_W - GRID_PADDING * 2 - GRID_GAP) / 2);
 const DASHBOARD_REFRESH_INTERVAL = 4000;
+const STOP_COLOR = '#E11D48';
+const STOP_COLOR_DARK = '#BE123C';
 
 const AVG_STATUS_STYLE = {
   good: { bg: '#F0FDF4', border: '#BBF7D0', text: '#166534', dot: '#22C55E' },
@@ -69,7 +71,7 @@ const getWqiHighlightStatus = (value, explicitStatus) => {
 
 const normalizeDevice = (device) => ({
   ...device,
-  status: device?.status === 'active' && !device?.last_seen ? 'inactive' : (device?.status || 'inactive'),
+  status: device?.status || 'inactive',
 });
 
 const normalizeDevices = (list = []) => list.map(normalizeDevice);
@@ -896,18 +898,29 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               onPress={() => onNavigateToMeasurement?.()}
               activeOpacity={0.85}
               style={{
-                backgroundColor: activeMeasurement ? '#DC2626' : '#5AA3C8',
-                borderRadius: 12, paddingVertical: 13,
-                flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+                backgroundColor: activeMeasurement ? STOP_COLOR : '#5AA3C8',
+                borderRadius: 14,
+                minHeight: activeMeasurement ? 72 : 50,
+                paddingVertical: activeMeasurement ? 12 : 13,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 10,
+                shadowColor: activeMeasurement ? STOP_COLOR_DARK : '#3E8FB8',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.16,
+                shadowRadius: 10,
+                elevation: 3,
               }}
             >
-              <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={18} color="#fff" />
-              <View>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, textAlign: 'center' }}>
+              <Ionicons name={activeMeasurement ? 'stop-circle' : 'play-circle'} size={activeMeasurement ? 24 : 18} color="#fff" />
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: activeMeasurement ? 16 : 14, textAlign: 'center' }}>
                   {activeMeasurement ? 'Stop' : 'Start'}
                 </Text>
                 {activeMeasurement && (
-                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, textAlign: 'center', marginTop: 1 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.86)', fontSize: 12, fontWeight: '700', textAlign: 'center', marginTop: 2 }}>
                     {formatElapsed(elapsed)} - {activeMeasurement.location || activeMeasurement.device?.location || 'Sesi Aktif'}
                   </Text>
                 )}

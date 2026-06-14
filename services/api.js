@@ -199,11 +199,19 @@ export const deleteChatSession = (sessionId) =>
 
 /** POST /api/measurements/start */
 export const startMeasurement = (deviceCode) =>
-  apiClient.post('/measurements/start', { device_code: deviceCode }, { tag: 'startMeasurement' });
+  apiClient.post('/measurements/start', { device_code: deviceCode }, {
+    tag: 'startMeasurement',
+    timeoutMs: 30000,
+    fallbackErrorMsg: 'Sesi pengukuran belum dapat dimulai',
+  });
 
 /** POST /api/measurements/stop */
 export const stopMeasurement = (deviceCode) =>
-  apiClient.post('/measurements/stop', { device_code: deviceCode }, { tag: 'stopMeasurement' });
+  apiClient.post('/measurements/stop', { device_code: deviceCode }, {
+    tag: 'stopMeasurement',
+    timeoutMs: 30000,
+    fallbackErrorMsg: 'Sesi pengukuran belum dapat dihentikan',
+  });
 
 /** GET /api/measurements */
 export const getMeasurements = () =>

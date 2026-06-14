@@ -18,7 +18,6 @@
     "expo-file-system": "~17.0.1",
     "expo-font": "~12.0.10",
     "expo-linear-gradient": "~13.0.2",
-    "expo-modules-core": "~1.12.26",
     "expo-network": "~6.0.1",
     "expo-sharing": "~12.0.1",
     "expo-status-bar": "~1.12.1",

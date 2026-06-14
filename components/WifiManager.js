@@ -562,7 +562,7 @@ export default function WiFiManager({ onConnected }) {
   const keepAliveRef  = useRef(null);
   const appStateRef   = useRef(AppState.currentState);
 
-  const handleEspConnected = useCallback((ssid) => {
+  const handleEspConnected = useCallback((ssid, { autoNavigate = false } = {}) => {
     clearInterval(keepAliveRef.current);
     setScanError(null);
     setSetupWarning(null);
@@ -574,7 +574,9 @@ export default function WiFiManager({ onConnected }) {
     }));
     setEspConnected(true);
     setEspConnectedSsid(ssid);
-    setTimeout(() => onConnected?.(), 1500);
+    if (autoNavigate) {
+      setTimeout(() => onConnected?.(), 1500);
+    }
   }, [onConnected]);
 
   // ── Fix: jaga agar HP tidak drop dari UniFlow-Setup ──────────
@@ -666,7 +668,7 @@ export default function WiFiManager({ onConnected }) {
         setWifiStatus(statusResult);
         setScanError(null);
         setSetupWarning(null);
-        handleEspConnected(statusResult.ssid);
+        handleEspConnected(statusResult.ssid, { autoNavigate: false });
         setScanning(false);
         return;
       }
@@ -752,7 +754,7 @@ export default function WiFiManager({ onConnected }) {
   const handleSuccess = useCallback((ssid) => {
     setShowConnect(false);
     if (ssid) {
-      handleEspConnected(ssid);
+      handleEspConnected(ssid, { autoNavigate: true });
     } else {
       onConnected?.();
     }
@@ -832,9 +834,11 @@ export default function WiFiManager({ onConnected }) {
           }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4ADE80' }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>{wifiStatus.ssid}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>
+                Connected - {wifiStatus.ssid}
+              </Text>
               <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
-                {wifiStatus.ip ? `IP: ${wifiStatus.ip}` : 'Terhubung'}
+                {wifiStatus.ip ? `IP: ${wifiStatus.ip}` : 'ESP32 terhubung'}
                 {wifiStatus.signal ? ` \u00b7 ${wifiStatus.signal} dBm` : ''}
               </Text>
             </View>
@@ -946,12 +950,22 @@ export default function WiFiManager({ onConnected }) {
             </View>
             <View style={{ alignItems: 'center', gap: 4 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: '#15803D' }}>
-                {espConnectedSsid}
+                Connected - {espConnectedSsid}
               </Text>
-              <Text style={{ fontSize: 12, color: '#16A34A' }}>Connected</Text>
+              <Text style={{ fontSize: 12, color: '#16A34A' }}>ESP32 telah terhubung ke jaringan WiFi</Text>
             </View>
-            <ActivityIndicator size="small" color="#22C55E" />
-            <Text style={{ fontSize: 11, color: '#86EFAC' }}>Mengalihkan ke Dashboard...</Text>
+            <TouchableOpacity
+              onPress={() => onConnected?.()}
+              style={{
+                marginTop: 2,
+                backgroundColor: '#22C55E',
+                borderRadius: 12,
+                paddingHorizontal: 18,
+                paddingVertical: 10,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Kembali ke Dashboard</Text>
+            </TouchableOpacity>
           </View>
         ) : scanError ? (
           <View style={{
