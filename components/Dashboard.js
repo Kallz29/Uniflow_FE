@@ -13,7 +13,7 @@ import {
   getAllSensors, getLatestSensor, getSensorStats,
   getAlerts, markAlertRead, markAllAlertsRead, getThreshold,
   updateThreshold, resetThreshold,
-  getAllDevices, createDevice, updateDevice,
+  getAllDevices, createDevice, updateDevice, deleteDevice,
   startMeasurement, stopMeasurement, getMeasurements,
 } from '../services/api';
 import { checkESPReachable } from '../services/espDevice';
@@ -54,7 +54,7 @@ const parseSessionDate = (str) => {
   const raw = String(str).trim();
   const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
   const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-  const parsed = new Date(hasTimezone ? raw : normalized);
+  const parsed = new Date(hasTimezone ? raw : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
@@ -65,6 +65,19 @@ const getWqiHighlightStatus = (value, explicitStatus) => {
   if (n >= 80) return 'good';
   if (n >= 60) return 'warning';
   return 'danger';
+};
+
+const normalizeDevice = (device) => ({
+  ...device,
+  status: device?.status === 'active' && !device?.last_seen ? 'inactive' : (device?.status || 'inactive'),
+});
+
+const normalizeDevices = (list = []) => list.map(normalizeDevice);
+
+const buildEditingLocation = (list = []) => {
+  const init = {};
+  list.forEach((d) => { init[d.id] = d.location || ''; });
+  return init;
 };
 
 const LoadingSkeleton = () => (
@@ -219,7 +232,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
   }, [tourLayouts.refHeader]);
 
   const applyDashboardSnapshot = useCallback((snapshot) => {
-    const {
+    let {
       latest = {},
       list = [],
       statsData = {},
@@ -229,6 +242,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
       measurementSessions = [],
     } = snapshot || {};
 
+    devicesList = normalizeDevices(devicesList);
     const active = measurementSessions.find((s) => s.status === 'active') || null;
     setThreshold(th);
     setActiveMeasurement(active);
@@ -291,7 +305,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
       try {
         const devRes = await getAllDevices();
-        devicesList = devRes.data || [];
+        devicesList = normalizeDevices(devRes.data || []);
         setDevices(devicesList);
       } catch (_) {
         // Indikator offline tidak boleh membuat dashboard gagal dimuat.
@@ -399,11 +413,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     setMeasurementLoading(true);
     try {
       const res = await getAllDevices();
-      const list = res.data || [];
+      const list = normalizeDevices(res.data || []);
       setDevices(list);
-      const init = {};
-      list.forEach((d) => { init[d.id] = d.location || ''; });
-      setEditingLocation(init);
+      setEditingLocation(buildEditingLocation(list));
     } catch (err) {
       Alert.alert('Gagal', toUserMessage(err, 'Gagal memuat perangkat'));
     } finally {
@@ -546,11 +558,9 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     setDeviceLoading(true);
     try {
       const res = await getAllDevices();
-      const list = res.data || [];
+      const list = normalizeDevices(res.data || []);
       setDevices(list);
-      const init = {};
-      list.forEach((d) => { init[d.id] = d.location || ''; });
-      setEditingLocation(init);
+      setEditingLocation(buildEditingLocation(list));
     } catch (err) {
       logError('Dashboard.loadDevices', err);
       setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal memuat perangkat') });
@@ -621,6 +631,39 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     const diffDay = Math.floor(diffHour / 24);
     if (diffDay < 7) return `${diffDay} hari lalu`;
     return lastUpdated.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const handleDeleteDevice = (device) => {
+    Alert.alert(
+      'Hapus device?',
+      `${device.device_code || `Device #${device.id}`} akan dihapus dari daftar perangkat.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            setDeviceSaving(`${device.id}_delete`);
+            setDeviceMsg(null);
+            try {
+              await deleteDevice(device.id);
+              setDevices((prev) => prev.filter((d) => d.id !== device.id));
+              setEditingLocation((prev) => {
+                const next = { ...prev };
+                delete next[device.id];
+                return next;
+              });
+              setSelectedDevice(null);
+              setDeviceMsg({ type: 'ok', text: 'Device berhasil dihapus.' });
+            } catch (err) {
+              setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal menghapus device') });
+            } finally {
+              setDeviceSaving(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const formatCachedAt = () => {
@@ -821,7 +864,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
               onHistoryClick={() => setShowOverallHistory(true)}
               wqiScore={overallData?.value}
               wqiStatus={overallData?.status}
-              deviceStatus={devices.some((d) => d.status === 'active') ? 'active' : 'inactive'}
             />
           </View>
 
@@ -840,7 +882,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                     },
                   ]}
                 >
-                  <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: statusStyle.dot, marginBottom: 4 }} />
                   <Text style={[styles.statValue, { color: statusStyle.text }]}>{s.value}</Text>
                   <Text style={styles.statLabel}>{s.label}</Text>
                 </View>
@@ -876,18 +917,26 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
 
           <View style={styles.metricsSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Parameter Air</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.sectionTitle}>Parameter Air</Text>
+                <View style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: sensorDeviceStatus === 'active' ? '#ECFDF5' : '#FFF7ED',
+                  borderWidth: 1,
+                  borderColor: sensorDeviceStatus === 'active' ? '#BBF7D0' : '#FED7AA',
+                }}>
+                  <Ionicons
+                    name={sensorDeviceStatus === 'active' ? 'radio-outline' : 'cloud-offline-outline'}
+                    size={13}
+                    color={sensorDeviceStatus === 'active' ? '#16A34A' : '#C2410C'}
+                  />
+                </View>
+              </View>
               <Text style={styles.updateTime}>Diperbarui {formatLastUpdated()}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#4ADE80' }} />
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600' }}>Online</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#F87171' }} />
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600' }}>Offline</Text>
-              </View>
             </View>
           </View>
 
@@ -900,7 +949,6 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                       key={item.id}
                       item={item}
                       width={CARD_W}
-                      deviceStatus={sensorDeviceStatus}
                       onPress={() => setSelectedParameter(item.id)}
                     />
                   );
@@ -1116,18 +1164,43 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                   key={alert.id}
                   onPress={() => !alert.is_read && handleMarkRead(alert.id)}
                   style={{
-                    backgroundColor: alert.is_read ? '#F9FAFB' : (SEVERITY_BG[alert.severity] || '#FEE2E2'),
-                    borderRadius: 12, padding: 13, marginBottom: 10,
-                    borderLeftWidth: 3,
-                    borderLeftColor: alert.is_read ? '#D1D5DB' : (SEVERITY_TEXT[alert.severity] || '#DC2626'),
+                    backgroundColor: '#F8FBFF',
+                    borderRadius: 16,
+                    padding: 14,
+                    marginBottom: 12,
+                    borderWidth: 1.5,
+                    borderColor: alert.is_read ? '#EAF4FB' : '#FECACA',
+                    shadowColor: '#1A3040',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.06,
+                    shadowRadius: 10,
+                    elevation: 2,
                   }}
                 >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <View style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 12,
+                      backgroundColor: alert.is_read ? '#EAF4FB' : (SEVERITY_BG[alert.severity] || '#FEE2E2'),
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Ionicons
+                        name={alert.is_read ? 'notifications-outline' : 'warning-outline'}
+                        size={17}
+                        color={alert.is_read ? '#8BAFC0' : (SEVERITY_TEXT[alert.severity] || '#DC2626')}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 11, fontWeight: '700', color: alert.is_read ? '#9CA3AF' : (SEVERITY_TEXT[alert.severity] || '#DC2626') }}>
                       {alert.parameter?.toUpperCase()} — {SEVERITY_LABEL[alert.severity] || alert.severity}
                     </Text>
+                    </View>
                     {!alert.is_read && (
-                      <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#EF4444', marginTop: 2 }} />
+                      <View style={{ backgroundColor: '#FEE2E2', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 }}>
+                        <Text style={{ color: '#DC2626', fontSize: 9, fontWeight: '800' }}>BARU</Text>
+                      </View>
                     )}
                   </View>
                   <Text style={{ fontSize: 13, color: '#374151', lineHeight: 18 }}>{alert.message}</Text>
@@ -1442,13 +1515,18 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                         await createDevice({
                           device_code: code,
                           location: newDeviceLocation.trim(),
+                          status: 'inactive',
                         });
                         setDeviceMsg({ type: 'ok', text: 'Device berhasil ditambahkan!' });
                         setShowAddDevice(false);
                         setNewDeviceCode('');
                         setNewDeviceLocation('');
                         const res = await getAllDevices();
-                        setDevices(res.data || []);
+                        const nextDevices = normalizeDevices(res.data || []).map((device) => (
+                          device.device_code === code ? { ...device, status: 'inactive' } : device
+                        ));
+                        setDevices(nextDevices);
+                        setEditingLocation(buildEditingLocation(nextDevices));
                       } catch (err) {
                         setDeviceMsg({ type: 'err', text: toUserMessage(err, 'Gagal menambah device') });
                       } finally {
@@ -1612,6 +1690,32 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                       )}
                     </TouchableOpacity>
                   </View>
+
+                  <TouchableOpacity
+                    onPress={() => handleDeleteDevice(selectedDevice)}
+                    disabled={deviceSaving === `${selectedDevice.id}_delete`}
+                    style={{
+                      marginTop: 10,
+                      borderRadius: 12,
+                      paddingVertical: 12,
+                      borderWidth: 1.5,
+                      borderColor: '#FECACA',
+                      backgroundColor: '#FEF2F2',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                    }}
+                  >
+                    {deviceSaving === `${selectedDevice.id}_delete` ? (
+                      <ActivityIndicator color="#DC2626" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                        <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '800' }}>Hapus Device</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ) : (
                 devices.map((device) => (

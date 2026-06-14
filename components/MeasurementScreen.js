@@ -22,7 +22,7 @@ const parseSessionDate = (str) => {
   const raw = String(str).trim();
   const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
   const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-  const parsed = new Date(hasTimezone ? raw : normalized);
+  const parsed = new Date(hasTimezone ? raw : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
@@ -40,6 +40,11 @@ const PARAM_META = [
   { key: 'tds', label: 'TDS', unit: 'ppm', icon: 'flask' },
   { key: 'turbidity', label: 'Kekeruhan', unit: 'NTU', icon: 'eyedrop' },
 ];
+
+const normalizeDevice = (device) => ({
+  ...device,
+  status: device?.status === 'active' && !device?.last_seen ? 'inactive' : (device?.status || 'inactive'),
+});
 
 export default function MeasurementScreen({ onBack }) {
   const [latest, setLatest] = useState(null);
@@ -62,7 +67,7 @@ export default function MeasurementScreen({ onBack }) {
         getMeasurements(),
       ]);
       setLatest(latestRes.data);
-      setDevices(devRes.data || []);
+      setDevices((devRes.data || []).map(normalizeDevice));
       const sessions = measRes.data || [];
       setActiveMeasurement(sessions.find((s) => s.status === 'active') || null);
     } catch (err) {

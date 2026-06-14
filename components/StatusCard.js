@@ -54,7 +54,7 @@ const ScoreRing = ({ score }) => {
   );
 };
 
-export default function StatusCard({ onHistoryClick, wqiScore, wqiStatus, deviceStatus }) {
+export default function StatusCard({ onHistoryClick, wqiScore, wqiStatus }) {
   const scaleAnim  = useRef(new Animated.Value(0.95)).current;
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
@@ -97,13 +97,6 @@ export default function StatusCard({ onHistoryClick, wqiScore, wqiStatus, device
           colors={config.colors}
           style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, width: '100%' }}
         >
-          <View style={{
-            position: 'absolute', top: 12, right: 12,
-            width: 10, height: 10, borderRadius: 5,
-            backgroundColor: deviceStatus === 'active' ? '#4ADE80' : '#F87171',
-            borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)',
-            zIndex: 2,
-          }} />
           <ScoreRing score={score} />
 
           <View style={{ flex: 1, marginLeft: 16 }}>

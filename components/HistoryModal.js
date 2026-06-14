@@ -147,6 +147,8 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const [activeZone, setActiveZone] = useState(null);
   const [startHour, setStartHour] = useState(0);
   const [endHour, setEndHour] = useState(23);
+  const [startHourText, setStartHourText] = useState('');
+  const [endHourText, setEndHourText] = useState('');
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -199,10 +201,29 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
     setActiveZone(null);
     setStartHour(0);
     setEndHour(23);
+    setStartHourText('');
+    setEndHourText('');
+  };
+
+  const normalizeHour = (text, fallback) => {
+    if (text.trim() === '') return fallback;
+    const num = parseInt(text.replace(/\D/g, ''), 10);
+    if (Number.isNaN(num)) return fallback;
+    return Math.min(Math.max(num, 0), 23);
   };
 
   const handleApply = () => {
-    onApply({ startDate, endDate, zone: activeZone, startHour, endHour });
+    const normalizedStartHour = normalizeHour(startHourText, 0);
+    const normalizedEndHour = normalizeHour(endHourText, 23);
+    setStartHour(normalizedStartHour);
+    setEndHour(normalizedEndHour);
+    onApply({
+      startDate,
+      endDate,
+      zone: activeZone,
+      startHour: normalizedStartHour,
+      endHour: normalizedEndHour,
+    });
     onClose();
   };
 
@@ -393,14 +414,22 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
                 <TextInput
-                  value={String(startHour).padStart(2, '0') + ':00'}
+                  value={startHourText}
                   keyboardType="numeric"
-                  maxLength={5}
-                  placeholder="00:00"
+                  maxLength={2}
+                  placeholder="00"
                   placeholderTextColor="#B0CFE0"
                   onChangeText={(v) => {
-                    const num = parseInt(v.replace(/\D/g, ''), 10);
-                    if (!isNaN(num) && num >= 0 && num <= 23) setStartHour(num);
+                    const digits = v.replace(/\D/g, '').slice(0, 2);
+                    setStartHourText(digits);
+                    const num = parseInt(digits, 10);
+                    if (!Number.isNaN(num) && num >= 0 && num <= 23) setStartHour(num);
+                  }}
+                  onBlur={() => {
+                    if (startHourText.trim() === '') return;
+                    const normalized = normalizeHour(startHourText, 0);
+                    setStartHour(normalized);
+                    setStartHourText(String(normalized).padStart(2, '0'));
                   }}
                   style={{
                     borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
@@ -416,14 +445,22 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI JAM</Text>
                 <TextInput
-                  value={String(endHour).padStart(2, '0') + ':59'}
+                  value={endHourText}
                   keyboardType="numeric"
-                  maxLength={5}
-                  placeholder="23:59"
+                  maxLength={2}
+                  placeholder="23"
                   placeholderTextColor="#B0CFE0"
                   onChangeText={(v) => {
-                    const num = parseInt(v.replace(/\D/g, ''), 10);
-                    if (!isNaN(num) && num >= 0 && num <= 23) setEndHour(num);
+                    const digits = v.replace(/\D/g, '').slice(0, 2);
+                    setEndHourText(digits);
+                    const num = parseInt(digits, 10);
+                    if (!Number.isNaN(num) && num >= 0 && num <= 23) setEndHour(num);
+                  }}
+                  onBlur={() => {
+                    if (endHourText.trim() === '') return;
+                    const normalized = normalizeHour(endHourText, 23);
+                    setEndHour(normalized);
+                    setEndHourText(String(normalized).padStart(2, '0'));
                   }}
                   style={{
                     borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,

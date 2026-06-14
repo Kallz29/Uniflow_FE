@@ -50,7 +50,7 @@ const STEPS = [
   {
     id: 'params',
     title: 'Parameter Air',
-    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Dot kanan atas menunjukkan koneksi device.',
+    desc: 'Tap kartu untuk lihat riwayat historis dan export CSV. Ikon di judul menunjukkan koneksi device.',
     refKey: 'refParams',
     icon: 'grid',
     scrollY: 180,
@@ -179,6 +179,32 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
     };
   }, [current.id, current.noHighlight, refs, scrollY, window]);
 
+  const measureWindowHighlight = useCallback((refKey) => new Promise((resolve) => {
+    if (current.noHighlight || !refKey) {
+      resolve(null);
+      return;
+    }
+
+    const node = refs[refKey]?.current;
+    if (!node?.measureInWindow) {
+      resolve(null);
+      return;
+    }
+
+    node.measureInWindow((x, y, width, height) => {
+      if (!width || !height) {
+        resolve(null);
+        return;
+      }
+      resolve({
+        top: clamp(y, SCREEN_MARGIN, window.height - height - SCREEN_MARGIN),
+        left: clamp(x, SCREEN_MARGIN, window.width - width - SCREEN_MARGIN),
+        width: Math.min(width, window.width - SCREEN_MARGIN * 2),
+        height: Math.min(height, window.height - SCREEN_MARGIN * 2),
+      });
+    });
+  }), [current.noHighlight, refs, window.height, window.width]);
+
   const getTargetScrollY = useCallback(() => {
     if (current.noHighlight) return 0;
 
@@ -207,14 +233,23 @@ export default function QuickTour({ visible, onDone, refs = {}, scrollRef, scrol
   useEffect(() => {
     if (!visible) return undefined;
 
+    let cancelled = false;
     const targetScrollY = getTargetScrollY();
     if (scrollRef?.current) {
       scrollRef.current.scrollTo({ y: targetScrollY, animated: false });
     }
-    setHighlight(getLayoutHighlight(current.refKey, targetScrollY));
+    const timer = setTimeout(async () => {
+      const measured = await measureWindowHighlight(current.refKey);
+      if (!cancelled) {
+        setHighlight(measured || getLayoutHighlight(current.refKey, targetScrollY));
+      }
+    }, 80);
 
-    return undefined;
-  }, [step, visible, current.refKey, getLayoutHighlight, getTargetScrollY, scrollRef, window.height, window.width]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [step, visible, current.refKey, getLayoutHighlight, getTargetScrollY, measureWindowHighlight, scrollRef, window.height, window.width]);
 
   useEffect(() => {
     if (!visible) return undefined;
