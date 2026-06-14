@@ -1,234 +1,219 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Image, Animated, Easing, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { splashScreenStyles as styles } from '../styles/splashScreenStyles';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 export default function SplashScreen() {
-  // Logo entrance
-  const scaleAnim   = useRef(new Animated.Value(0.3)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim   = useRef(new Animated.Value(0)).current;
-
-  // Text slide-up
-  const titleY    = useRef(new Animated.Value(24)).current;
-  const titleOpac = useRef(new Animated.Value(0)).current;
-  const subY      = useRef(new Animated.Value(16)).current;
-  const subOpac   = useRef(new Animated.Value(0)).current;
-
-  // Ripple rings (3 rings)
-  const ripples = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
-  const rippleOpacities = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
-
-  // Dots
-  const dotsAnim = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
-
-  // Background wave
+  const logoScale = useRef(new Animated.Value(0.82)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoFloat = useRef(new Animated.Value(0)).current;
+  const titleY = useRef(new Animated.Value(18)).current;
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+  const subtitleY = useRef(new Animated.Value(14)).current;
+  const subtitleOpacity = useRef(new Animated.Value(0)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
+  const bubbleAnim = useRef(new Animated.Value(0)).current;
+  const dotsAnim = useRef([
+    new Animated.Value(0.35),
+    new Animated.Value(0.35),
+    new Animated.Value(0.35),
+  ]).current;
 
   useEffect(() => {
-    // ── 1. Logo pop-in ──────────────────────────
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 60,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // ── 2. Text fade + slide up (staggered) ─────
     Animated.sequence([
-      Animated.delay(300),
       Animated.parallel([
-        Animated.timing(titleOpac, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(titleY, { toValue: 0, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          tension: 58,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoOpacity, {
+          toValue: 1,
+          duration: 360,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.stagger(90, [
+        Animated.parallel([
+          Animated.timing(titleOpacity, {
+            toValue: 1,
+            duration: 380,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(titleY, {
+            toValue: 0,
+            duration: 380,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(subtitleOpacity, {
+            toValue: 1,
+            duration: 380,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(subtitleY, {
+            toValue: 0,
+            duration: 380,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
       ]),
     ]).start();
 
-    Animated.sequence([
-      Animated.delay(500),
-      Animated.parallel([
-        Animated.timing(subOpac, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(subY, { toValue: 0, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ]),
-    ]).start();
-
-    // ── 3. Logo float loop ───────────────────────
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -10, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
+    Animated.stagger(
+      160,
+      dotsAnim.map((anim) => Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0.35,
+            duration: 520,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      ))
     ).start();
 
-    // ── 4. Ripple rings ──────────────────────────
-    const startRipple = (scale, opacity, delay) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.parallel([
-            Animated.timing(scale, { toValue: 1, duration: 2000, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-            Animated.sequence([
-              Animated.timing(opacity, { toValue: 0.35, duration: 300, useNativeDriver: true }),
-              Animated.timing(opacity, { toValue: 0, duration: 1700, useNativeDriver: true }),
-            ]),
-          ]),
-          Animated.parallel([
-            Animated.timing(scale, { toValue: 0, duration: 0, useNativeDriver: true }),
-            Animated.timing(opacity, { toValue: 0, duration: 0, useNativeDriver: true }),
-          ]),
-        ])
-      ).start();
-    };
-
-    startRipple(ripples[0], rippleOpacities[0], 800);
-    startRipple(ripples[1], rippleOpacities[1], 1400);
-    startRipple(ripples[2], rippleOpacities[2], 2000);
-
-    // ── 5. Dots pulse ────────────────────────────
-    Animated.sequence([
-      Animated.delay(700),
-      Animated.stagger(150,
-        dotsAnim.map(anim =>
-          Animated.loop(
-            Animated.sequence([
-              Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-              Animated.timing(anim, { toValue: 0.25, duration: 500, useNativeDriver: true }),
-            ])
-          )
-        )
-      ),
-    ]).start();
-
-    // ── 6. Wave translate ────────────────────────
     Animated.loop(
       Animated.timing(waveAnim, {
         toValue: 1,
-        duration: 4000,
-        easing: Easing.linear,
+        duration: 5200,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoFloat, {
+          toValue: -7,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoFloat, {
+          toValue: 0,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.timing(bubbleAnim, {
+        toValue: 1,
+        duration: 3600,
+        easing: Easing.inOut(Easing.quad),
         useNativeDriver: true,
       })
     ).start();
   }, []);
 
-  const RIPPLE_SIZE = 220;
+  const waveTranslate = waveAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width * 0.1, width * 0.1],
+  });
+
+  const bubbleLift = bubbleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, -18],
+  });
 
   return (
-    <View style={styles.container}>
-
-      {/* ── Decorative background blobs ── */}
-      <View style={styles.blobTopRight} />
-      <View style={styles.blobBottomLeft} />
-
-      {/* ── Wave strip at bottom ── */}
+    <LinearGradient
+      colors={['#5AA3C8', '#3E8FB8']}
+      style={styles.container}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+    >
       <Animated.View
         style={[
-          styles.waveStrip,
-          {
-            transform: [{
-              translateX: waveAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, -width],
-              }),
-            }],
-          },
+          styles.waveBack,
+          { transform: [{ translateX: waveTranslate }, { rotate: '-6deg' }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.waveFront,
+          { transform: [{ translateX: Animated.multiply(waveTranslate, -0.75) }, { rotate: '5deg' }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.bubbleLarge,
+          { opacity: bubbleAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.16, 0.28, 0.16] }), transform: [{ translateY: bubbleLift }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.bubbleSmall,
+          { opacity: bubbleAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.24, 0.1, 0.24] }), transform: [{ translateY: Animated.multiply(bubbleLift, -0.7) }] },
         ]}
       />
 
-      {/* ── Ripple rings around logo ── */}
-      <View style={styles.rippleContainer}>
-        {ripples.map((scale, i) => (
-          <Animated.View
-            key={i}
-            style={[
-              styles.rippleRing,
-              {
-                width: RIPPLE_SIZE + i * 40,
-                height: RIPPLE_SIZE + i * 40,
-                borderRadius: (RIPPLE_SIZE + i * 40) / 2,
-                opacity: rippleOpacities[i],
-                transform: [{ scale: scale }],
-              },
-            ]}
-          />
-        ))}
-      </View>
-
-      {/* ── Main content ── */}
       <Animated.View
         style={[
-          styles.content,
+          styles.logoWrap,
           {
-            transform: [{ scale: scaleAnim }, { translateY: floatAnim }],
-            opacity: opacityAnim,
+            opacity: logoOpacity,
+            transform: [{ scale: logoScale }, { translateY: logoFloat }],
           },
         ]}
       >
-        {/* Logo card */}
-        <View style={styles.logoCard}>
-          <Image
-            source={require('../assets/logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
+        <Image
+          source={require('../assets/logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </Animated.View>
 
-      {/* ── Text block (separate so float doesn't affect it) ── */}
       <View style={styles.textBlock}>
         <Animated.Text
           style={[
             styles.title,
-            { opacity: titleOpac, transform: [{ translateY: titleY }] },
+            { opacity: titleOpacity, transform: [{ translateY: titleY }] },
           ]}
         >
           UniFlow
         </Animated.Text>
+
         <Animated.Text
           style={[
             styles.subtitle,
-            { opacity: subOpac, transform: [{ translateY: subY }] },
+            { opacity: subtitleOpacity, transform: [{ translateY: subtitleY }] },
           ]}
         >
           Monitoring Kualitas Air
         </Animated.Text>
-
-        {/* Divider line */}
-        <Animated.View style={[styles.divider, { opacity: subOpac }]} />
-
-        {/* Dots */}
-        <View style={styles.dotsContainer}>
-          {dotsAnim.map((anim, index) => (
-            <Animated.View
-              key={index}
-              style={[
-                styles.dot,
-                index === 1 && styles.dotMid,
-                { opacity: anim },
-              ]}
-            />
-          ))}
-        </View>
       </View>
 
-    </View>
+      <View style={styles.dotsContainer}>
+        {dotsAnim.map((anim, index) => (
+          <Animated.View
+            key={index}
+            style={[
+              styles.dot,
+              { opacity: anim },
+            ]}
+          />
+        ))}
+      </View>
+    </LinearGradient>
   );
 }

@@ -1,137 +1,90 @@
-import { StyleSheet, Dimensions } from 'react-native';
-
-const { width, height } = Dimensions.get('window');
+import { StyleSheet } from 'react-native';
 
 export const splashScreenStyles = StyleSheet.create({
-
-  /* ── Root ── */
   container: {
     flex: 1,
-    backgroundColor: '#5AAEC8',   // satu shade lebih gelap dari header biasa
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 44,
     overflow: 'hidden',
   },
-
-  /* ── Background blobs (dekorasi sudut) ── */
-  blobTopRight: {
+  waveBack: {
     position: 'absolute',
-    top: -80,
-    right: -80,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
+    bottom: -38,
+    width: '128%',
+    height: 132,
+    borderRadius: 66,
     backgroundColor: 'rgba(255,255,255,0.10)',
   },
-  blobBottomLeft: {
+  waveFront: {
     position: 'absolute',
-    bottom: -100,
-    left: -60,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(30,80,120,0.18)',
+    bottom: -72,
+    width: '138%',
+    height: 154,
+    borderRadius: 77,
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-
-  /* ── Wave strip (bergerak horizontal di bawah) ── */
-  waveStrip: {
+  bubbleLarge: {
     position: 'absolute',
-    bottom: 60,
-    width: width * 2,
-    height: 90,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 45,
-    transform: [{ scaleX: 2 }],
+    top: '23%',
+    right: '18%',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-
-  /* ── Ripple rings ── */
-  rippleContainer: {
+  bubbleSmall: {
     position: 'absolute',
+    top: '34%',
+    left: '23%',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  logoWrap: {
+    width: 176,
+    height: 176,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  rippleRing: {
-    position: 'absolute',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'transparent',
-  },
-
-  /* ── Logo area ── */
-  content: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  logoCard: {
-    width: 120,
-    height: 120,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.40)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    // subtle shadow untuk depth
-    shadowColor: '#1A4A6B',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
   },
   logo: {
-    width: 72,
-    height: 72,
+    width: 160,
+    height: 160,
   },
-
-  /* ── Text block ── */
   textBlock: {
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 6,
   },
   title: {
-    fontSize: 38,
+    fontSize: 36,
     color: '#FFFFFF',
     fontWeight: '800',
-    letterSpacing: 2,
-    textShadowColor: 'rgba(20,70,110,0.25)',
+    letterSpacing: 0,
+    textShadowColor: 'rgba(20,70,110,0.18)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.80)',
-    fontWeight: '500',
-    letterSpacing: 3,
-    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.84)',
+    fontWeight: '600',
+    letterSpacing: 0,
     marginTop: 6,
   },
-
-  /* ── Divider ── */
-  divider: {
-    width: 40,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    marginTop: 20,
-    marginBottom: 16,
-  },
-
-  /* ── Dots ── */
   dotsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
+    marginTop: 30,
   },
   dot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-  },
-  dotMid: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
     backgroundColor: '#FFFFFF',
   },
 });

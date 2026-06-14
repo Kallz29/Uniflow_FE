@@ -863,38 +863,34 @@ export default function WiFiManager({ onConnected }) {
       {/* ── Instruksi ── */}
       <View style={{
         margin: 16, marginBottom: 0,
-        backgroundColor: '#EFF8FF', borderRadius: 12, padding: 12,
-        flexDirection: 'row', gap: 8, borderWidth: 1, borderColor: '#C5DDE8',
+        backgroundColor: setupWarning && !espConnected ? '#FFF7ED' : '#EFF8FF', borderRadius: 12, padding: 12,
+        flexDirection: 'row', gap: 8, borderWidth: 1, borderColor: setupWarning && !espConnected ? '#FED7AA' : '#C5DDE8',
       }}>
-        <Ionicons name="information-circle-outline" size={16} color="#5AA3C8" style={{ marginTop: 1 }} />
-        <Text style={{ fontSize: 12, color: '#4A8BAA', flex: 1, lineHeight: 17 }}>
-          Pastikan HP terhubung ke WiFi{' '}
-          <Text style={{ fontWeight: '700' }}>"UniFlow-Setup"</Text> dan{' '}
-          <Text style={{ fontWeight: '700' }}>matikan data seluler</Text> sementara.
-          {localIp ? ` IP HP: ${localIp}.` : ''}
+        <Ionicons
+          name={setupWarning && !espConnected ? 'wifi-outline' : 'information-circle-outline'}
+          size={16}
+          color={setupWarning && !espConnected ? '#C2410C' : '#5AA3C8'}
+          style={{ marginTop: 1 }}
+        />
+        <Text style={{ fontSize: 12, color: setupWarning && !espConnected ? '#C2410C' : '#4A8BAA', flex: 1, lineHeight: 17 }}>
+          {setupWarning && !espConnected ? (
+            <>
+              {setupWarning}{' '}
+              <Text style={{ fontWeight: '700' }}>Matikan data seluler/VPN sementara.</Text>
+              {localIp ? ` IP HP: ${localIp}.` : ''}
+            </>
+          ) : (
+            <>
+              Pastikan HP terhubung ke WiFi{' '}
+              <Text style={{ fontWeight: '700' }}>"UniFlow-Setup"</Text> dan{' '}
+              <Text style={{ fontWeight: '700' }}>matikan data seluler</Text> sementara.
+              {localIp ? ` IP HP: ${localIp}.` : ''}
+            </>
+          )}
         </Text>
       </View>
 
       {/* ── Scan header ── */}
-      {setupWarning && !espConnected && (
-        <View style={{
-          marginHorizontal: 16,
-          marginTop: 10,
-          backgroundColor: '#FFF7ED',
-          borderRadius: 12,
-          padding: 12,
-          flexDirection: 'row',
-          gap: 8,
-          borderWidth: 1,
-          borderColor: '#FED7AA',
-        }}>
-          <Ionicons name="wifi-outline" size={16} color="#C2410C" style={{ marginTop: 1 }} />
-          <Text style={{ fontSize: 12, color: '#C2410C', flex: 1, lineHeight: 17 }}>
-            {setupWarning}
-          </Text>
-        </View>
-      )}
-
       <View style={{
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10,
