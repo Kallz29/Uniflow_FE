@@ -54,9 +54,13 @@ const parseSessionDate = (str) => {
   if (!str) return new Date();
   if (str instanceof Date) return str;
   const raw = String(str).trim();
-  const hasTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  // Ada timezone eksplisit (Z atau +07:00) -> parse langsung
+  if (/(?:z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
+    return new Date(raw);
+  }
+  // Tidak ada timezone = WIB tanpa offset dari backend
   const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-  const parsed = new Date(hasTimezone ? raw : `${normalized}Z`);
+  const parsed = new Date(`${normalized}+07:00`);
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 

@@ -147,8 +147,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
   const [activeZone, setActiveZone] = useState(null);
   const [startHour, setStartHour] = useState(0);
   const [endHour, setEndHour] = useState(23);
+  const [startMin, setStartMin] = useState(0);
+  const [endMin, setEndMin] = useState(59);
   const [startHourText, setStartHourText] = useState('');
   const [endHourText, setEndHourText] = useState('');
+  const [startMinText, setStartMinText] = useState('');
+  const [endMinText, setEndMinText] = useState('');
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
@@ -201,8 +205,12 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
     setActiveZone(null);
     setStartHour(0);
     setEndHour(23);
+    setStartMin(0);
+    setEndMin(59);
     setStartHourText('');
     setEndHourText('');
+    setStartMinText('');
+    setEndMinText('');
   };
 
   const normalizeHour = (text, fallback) => {
@@ -214,15 +222,21 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
 
   const handleApply = () => {
     const normalizedStartHour = normalizeHour(startHourText, 0);
+    const normalizedStartMin = Math.min(Math.max(parseInt(startMinText || '0', 10) || 0, 0), 59);
     const normalizedEndHour = normalizeHour(endHourText, 23);
+    const normalizedEndMin = Math.min(Math.max(parseInt(endMinText || '59', 10) || 59, 0), 59);
     setStartHour(normalizedStartHour);
+    setStartMin(normalizedStartMin);
     setEndHour(normalizedEndHour);
+    setEndMin(normalizedEndMin);
     onApply({
       startDate,
       endDate,
       zone: activeZone,
       startHour: normalizedStartHour,
+      startMin: normalizedStartMin,
       endHour: normalizedEndHour,
+      endMin: normalizedEndMin,
     });
     onClose();
   };
@@ -407,73 +421,128 @@ function CalendarFilterModal({ visible, onClose, onApply, history, zones }) {
           {/* JAM SECTION */}
           <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#1A3040', marginBottom: 10 }}>
-              Rentang Jam
+              Rentang Waktu
             </Text>
+
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* Dari Jam */}
+              {/* Dari */}
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>DARI JAM</Text>
-                <TextInput
-                  value={startHourText}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  placeholder="00"
-                  placeholderTextColor="#B0CFE0"
-                  onChangeText={(v) => {
-                    const digits = v.replace(/\D/g, '').slice(0, 2);
-                    setStartHourText(digits);
-                    const num = parseInt(digits, 10);
-                    if (!Number.isNaN(num) && num >= 0 && num <= 23) setStartHour(num);
-                  }}
-                  onBlur={() => {
-                    if (startHourText.trim() === '') return;
-                    const normalized = normalizeHour(startHourText, 0);
-                    setStartHour(normalized);
-                    setStartHourText(String(normalized).padStart(2, '0'));
-                  }}
-                  style={{
-                    borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
-                    padding: 10, fontSize: 15, fontWeight: '700', color: '#1A3040',
-                    backgroundColor: '#F9FAFB', textAlign: 'center',
-                  }}
-                />
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 6 }}>DARI</Text>
+                <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <TextInput
+                    value={startHourText}
+                    keyboardType="numeric"
+                    maxLength={2}
+                    placeholder="00"
+                    placeholderTextColor="#B0CFE0"
+                    onChangeText={(v) => {
+                      const digits = v.replace(/\D/g, '').slice(0, 2);
+                      setStartHourText(digits);
+                      const num = parseInt(digits, 10);
+                      if (!Number.isNaN(num) && num >= 0 && num <= 23) setStartHour(num);
+                    }}
+                    onBlur={() => {
+                      if (startHourText.trim() === '') return;
+                      const n = Math.min(Math.max(parseInt(startHourText, 10) || 0, 0), 23);
+                      setStartHour(n);
+                      setStartHourText(String(n).padStart(2, '0'));
+                    }}
+                    style={{
+                      flex: 1, borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      paddingVertical: 10, fontSize: 18, fontWeight: '700', color: '#1A3040',
+                      backgroundColor: '#F9FAFB', textAlign: 'center',
+                    }}
+                  />
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#B0CFE0' }}>:</Text>
+                  <TextInput
+                    value={startMinText}
+                    keyboardType="numeric"
+                    maxLength={2}
+                    placeholder="00"
+                    placeholderTextColor="#B0CFE0"
+                    onChangeText={(v) => {
+                      const digits = v.replace(/\D/g, '').slice(0, 2);
+                      setStartMinText(digits);
+                      const num = parseInt(digits, 10);
+                      if (!Number.isNaN(num) && num >= 0 && num <= 59) setStartMin(num);
+                    }}
+                    onBlur={() => {
+                      if (startMinText.trim() === '') return;
+                      const n = Math.min(Math.max(parseInt(startMinText, 10) || 0, 0), 59);
+                      setStartMin(n);
+                      setStartMinText(String(n).padStart(2, '0'));
+                    }}
+                    style={{
+                      flex: 1, borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      paddingVertical: 10, fontSize: 18, fontWeight: '700', color: '#1A3040',
+                      backgroundColor: '#F9FAFB', textAlign: 'center',
+                    }}
+                  />
+                </View>
               </View>
 
-              <Ionicons name="arrow-forward" size={16} color="#B0CFE0" style={{ marginTop: 16 }} />
+              <Ionicons name="arrow-forward" size={16} color="#B0CFE0" style={{ marginTop: 18 }} />
 
-              {/* Sampai Jam */}
+              {/* Sampai */}
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 4 }}>SAMPAI JAM</Text>
-                <TextInput
-                  value={endHourText}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  placeholder="23"
-                  placeholderTextColor="#B0CFE0"
-                  onChangeText={(v) => {
-                    const digits = v.replace(/\D/g, '').slice(0, 2);
-                    setEndHourText(digits);
-                    const num = parseInt(digits, 10);
-                    if (!Number.isNaN(num) && num >= 0 && num <= 23) setEndHour(num);
-                  }}
-                  onBlur={() => {
-                    if (endHourText.trim() === '') return;
-                    const normalized = normalizeHour(endHourText, 23);
-                    setEndHour(normalized);
-                    setEndHourText(String(normalized).padStart(2, '0'));
-                  }}
-                  style={{
-                    borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
-                    padding: 10, fontSize: 15, fontWeight: '700', color: '#1A3040',
-                    backgroundColor: '#F9FAFB', textAlign: 'center',
-                  }}
-                />
+                <Text style={{ fontSize: 10, color: '#8BAFC0', fontWeight: '600', marginBottom: 6 }}>SAMPAI</Text>
+                <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+                  <TextInput
+                    value={endHourText}
+                    keyboardType="numeric"
+                    maxLength={2}
+                    placeholder="23"
+                    placeholderTextColor="#B0CFE0"
+                    onChangeText={(v) => {
+                      const digits = v.replace(/\D/g, '').slice(0, 2);
+                      setEndHourText(digits);
+                      const num = parseInt(digits, 10);
+                      if (!Number.isNaN(num) && num >= 0 && num <= 23) setEndHour(num);
+                    }}
+                    onBlur={() => {
+                      if (endHourText.trim() === '') return;
+                      const n = Math.min(Math.max(parseInt(endHourText, 10) || 0, 0), 23);
+                      setEndHour(n);
+                      setEndHourText(String(n).padStart(2, '0'));
+                    }}
+                    style={{
+                      flex: 1, borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      paddingVertical: 10, fontSize: 18, fontWeight: '700', color: '#1A3040',
+                      backgroundColor: '#F9FAFB', textAlign: 'center',
+                    }}
+                  />
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#B0CFE0' }}>:</Text>
+                  <TextInput
+                    value={endMinText}
+                    keyboardType="numeric"
+                    maxLength={2}
+                    placeholder="59"
+                    placeholderTextColor="#B0CFE0"
+                    onChangeText={(v) => {
+                      const digits = v.replace(/\D/g, '').slice(0, 2);
+                      setEndMinText(digits);
+                      const num = parseInt(digits, 10);
+                      if (!Number.isNaN(num) && num >= 0 && num <= 59) setEndMin(num);
+                    }}
+                    onBlur={() => {
+                      if (endMinText.trim() === '') return;
+                      const n = Math.min(Math.max(parseInt(endMinText, 10) || 0, 0), 59);
+                      setEndMin(n);
+                      setEndMinText(String(n).padStart(2, '0'));
+                    }}
+                    style={{
+                      flex: 1, borderWidth: 1.5, borderColor: '#D1E8F5', borderRadius: 10,
+                      paddingVertical: 10, fontSize: 18, fontWeight: '700', color: '#1A3040',
+                      backgroundColor: '#F9FAFB', textAlign: 'center',
+                    }}
+                  />
+                </View>
               </View>
             </View>
 
-            {startHour === 0 && endHour === 23 && (
+            {startHour === 0 && startMin === 0 && endHour === 23 && endMin === 59 && (
               <Text style={{ fontSize: 10, color: '#B0CFE0', marginTop: 6 }}>
-                Default: semua jam (00:00 - 23:59)
+                Default: semua waktu (00:00 - 23:59)
               </Text>
             )}
           </View>
@@ -600,7 +669,9 @@ export default function HistoryModal({
     endDate: null,
     zone: null,
     startHour: 0,
+    startMin: 0,
     endHour: 23,
+    endMin: 59,
   });
 
   // ── Quick zone filter langsung dari header list (tanpa buka modal) ──
@@ -637,10 +708,10 @@ export default function HistoryModal({
     }
 
     if (activeFilter.startDate) {
-      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
-      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+      const { startDate, endDate, startHour = 0, startMin = 0, endHour = 23, endMin = 59 } = activeFilter;
+      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:${pad(startMin)}:00`;
       const ed = endDate || startDate;
-      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:${pad(endMin)}:59`;
     }
 
     return params;
@@ -680,14 +751,14 @@ export default function HistoryModal({
 
   // Filter utama dari CalendarFilterModal
   const filteredByModal = useMemo(() => {
-    const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
+    const { startDate, endDate, zone, startHour = 0, startMin = 0, endHour = 23, endMin = 59 } = activeFilter;
     let result = displayHistory;
 
     if (startDate) {
-      const start = new Date(startDate.year, startDate.month, startDate.day, startHour, 0, 0);
+      const start = new Date(startDate.year, startDate.month, startDate.day, startHour, startMin, 0);
       const end = endDate
-        ? new Date(endDate.year, endDate.month, endDate.day, endHour, 59, 59)
-        : new Date(startDate.year, startDate.month, startDate.day, endHour, 59, 59);
+        ? new Date(endDate.year, endDate.month, endDate.day, endHour, endMin, 59)
+        : new Date(startDate.year, startDate.month, startDate.day, endHour, endMin, 59);
 
       result = result.filter((entry) => {
         const raw = toWibDate(entry.timestamp);
@@ -726,7 +797,7 @@ export default function HistoryModal({
   const isFiltered = !!activeFilter.startDate || !!activeFilter.zone;
 
   const filterLabel = () => {
-    const { startDate, endDate, zone, startHour = 0, endHour = 23 } = activeFilter;
+    const { startDate, endDate, zone, startHour = 0, startMin = 0, endHour = 23, endMin = 59 } = activeFilter;
     const parts = [];
 
     if (startDate) {
@@ -734,8 +805,8 @@ export default function HistoryModal({
       const e = endDate
         ? ` - ${endDate.day} ${MONTHS_SHORT[endDate.month]} ${endDate.year}`
         : '';
-      const timeStr = (startHour !== 0 || endHour !== 23)
-        ? ` - ${String(startHour).padStart(2, '0')}:00-${String(endHour).padStart(2, '0')}:59`
+      const timeStr = (startHour !== 0 || startMin !== 0 || endHour !== 23 || endMin !== 59)
+        ? ` - ${String(startHour).padStart(2, '0')}:${String(startMin ?? 0).padStart(2, '0')}-${String(endHour).padStart(2, '0')}:${String(endMin ?? 59).padStart(2, '0')}`
         : '';
       parts.push(s + e + timeStr);
     }
@@ -836,10 +907,10 @@ export default function HistoryModal({
     }
 
     if (activeFilter.startDate) {
-      const { startDate, endDate, startHour = 0, endHour = 23 } = activeFilter;
-      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:00:00`;
+      const { startDate, endDate, startHour = 0, startMin = 0, endHour = 23, endMin = 59 } = activeFilter;
+      params.start = `${startDate.year}-${pad(startDate.month + 1)}-${pad(startDate.day)} ${pad(startHour)}:${pad(startMin)}:00`;
       const ed = endDate || startDate;
-      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:59:59`;
+      params.end = `${ed.year}-${pad(ed.month + 1)}-${pad(ed.day)} ${pad(endHour)}:${pad(endMin)}:59`;
     } else {
       params.days = 90;
     }

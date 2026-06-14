@@ -617,25 +617,6 @@ export default function WiFiManager({ onConnected }) {
   }, []);
 
   useEffect(() => {
-    if (espConnected) return;
-    // Mulai keep-alive ping tiap 3 detik
-    keepAliveRef.current = setInterval(pingESP, 3000);
-
-    // AppState: re-scan saat app kembali ke foreground
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
-        doScan();
-      }
-      appStateRef.current = nextState;
-    });
-
-    return () => {
-      clearInterval(keepAliveRef.current);
-      sub.remove();
-    };
-  }, [pingESP, espConnected]);
-
-  useEffect(() => {
     Animated.parallel([
       Animated.timing(headerOpac, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(headerY,    { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -655,6 +636,8 @@ export default function WiFiManager({ onConnected }) {
   const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   const doScan = useCallback(async () => {
+    if (espConnected) return;
+
     setScanning(true);
     setScanError(null);
     setScanHint(null);
@@ -744,7 +727,27 @@ export default function WiFiManager({ onConnected }) {
     } finally {
       setScanning(false);
     }
-  }, [handleEspConnected]);
+  }, [handleEspConnected, espConnected]);
+
+  const doScanRef = useRef(doScan);
+  useEffect(() => { doScanRef.current = doScan; }, [doScan]);
+
+  useEffect(() => {
+    if (espConnected) return;
+    keepAliveRef.current = setInterval(pingESP, 3000);
+
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        doScanRef.current();
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      clearInterval(keepAliveRef.current);
+      sub.remove();
+    };
+  }, [pingESP, espConnected]);
 
   useEffect(() => {
     if (espConnected) return;
