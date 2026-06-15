@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#7CB9D8"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uniflow.mobile"
@@ -41,8 +43,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "736a14f6-f773-4e39-8b62-651c1860d74c"
+        "projectId": "69b4acbb-e53a-436e-9a9e-f23a531269c3"
       }
-    }
+    },
+    "owner": "kaluvyaa"
   }
 }
