@@ -50,19 +50,7 @@ const AVG_STATUS_STYLE = {
   danger: { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', dot: '#EF4444' },
 };
 
-const parseSessionDate = (str) => {
-  if (!str) return new Date();
-  if (str instanceof Date) return str;
-  const raw = String(str).trim();
-  // Ada timezone eksplisit (Z atau +07:00) -> parse langsung
-  if (/(?:z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
-    return new Date(raw);
-  }
-  // Tidak ada timezone = WIB tanpa offset dari backend
-  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-  const parsed = new Date(`${normalized}+07:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-};
+const parseSessionDate = parseSensorDate;
 
 const getWqiHighlightStatus = (value, explicitStatus) => {
   if (explicitStatus) return mapWQIStatus(explicitStatus);
@@ -627,8 +615,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
-    if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   const getAverageStats = () => {
@@ -1166,7 +1153,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                     Nilai: {alert.value} | Batas: {alert.threshold_min}{'\u2013'}{alert.threshold_max}
                   </Text>
                   <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>
-                    {new Date(alert.created_at.replace('Z', '')).toLocaleString('id-ID')}
+                    {parseSensorDate(alert.created_at).toLocaleString('id-ID')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1567,7 +1554,7 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                         </View>
                         {selectedDevice.last_seen && (
                           <Text style={{ fontSize: 10, color: '#8BAFC0' }}>
-                            Terakhir: {new Date(selectedDevice.last_seen.replace('Z', '')).toLocaleString('id-ID')}
+                            Terakhir: {parseSensorDate(selectedDevice.last_seen).toLocaleString('id-ID')}
                           </Text>
                         )}
                       </View>

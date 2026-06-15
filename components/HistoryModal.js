@@ -11,6 +11,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 import { exportSensorCSVContent, getAllSensors } from '../services/api';
+import { parseLocalDate } from '../utils/waterQuality';
 
 // ─── Konstanta ─────────────────────────────────────────────
 const MONTHS_ID = [
@@ -24,10 +25,7 @@ const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 const toWibDate = (value) => {
-  if (!value) return new Date();
-  if (value instanceof Date) return value;
-  const utc = new Date(value);
-  return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
+  return parseLocalDate(value);
 };
 
 const HISTORY_FIELD = {

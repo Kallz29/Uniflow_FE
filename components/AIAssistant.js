@@ -12,6 +12,7 @@ import {
   deleteChatSession,
 } from '../services/api';
 import { toUserMessage, logError } from '../utils/errorHandler';
+import { parseLocalDate } from '../utils/waterQuality';
 
 const stripMarkdown = (text) => {
   if (!text) return '';
@@ -39,7 +40,7 @@ const buildTitle = (text) => {
 const mapSessions = (sessions) =>
   sessions.map((s) => ({
     id: s.id,
-    date: new Date(s.created_at).toLocaleDateString('id-ID', {
+    date: parseLocalDate(s.created_at).toLocaleDateString('id-ID', {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
     }),
     preview: s.title && s.title !== 'Sesi Baru' ? s.title : 'Sesi Baru',
@@ -118,7 +119,7 @@ export default function AIAssistant({ onBack }) {
       id: String(item.id),
       text: item.role === 'assistant' ? stripMarkdown(item.content) : (item.content || ''),
       sender: item.role === 'assistant' ? 'ai' : 'user',
-      timestamp: new Date(item.created_at),
+      timestamp: parseLocalDate(item.created_at),
     }));
 
     if (msgs.length > 0) {

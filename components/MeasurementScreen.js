@@ -10,6 +10,7 @@ import {
   startMeasurement, stopMeasurement, updateDevice,
 } from '../services/api';
 import { toUserMessage, logError } from '../utils/errorHandler';
+import { parseLocalDate as parseSessionDate } from '../utils/waterQuality';
 
 const REFRESH_INTERVAL = 3000;
 const START_COLOR = '#5AA3C8';
@@ -31,20 +32,6 @@ const withRetry = async (fn, attempts = 3) => {
     }
   }
   throw lastErr;
-};
-
-const parseSessionDate = (str) => {
-  if (!str) return new Date();
-  if (str instanceof Date) return str;
-  const raw = String(str).trim();
-  // Ada timezone eksplisit (Z atau +07:00) -> parse langsung
-  if (/(?:z|[+-]\d{2}:?\d{2})$/i.test(raw)) {
-    return new Date(raw);
-  }
-  // Tidak ada timezone = WIB tanpa offset dari backend
-  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-  const parsed = new Date(`${normalized}+07:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 const formatElapsed = (sec) => {

@@ -59,10 +59,16 @@ export const mapWQIStatus = (statusStr) => {
   return 'good';
 };
 
-export const parseLocalDate = (str) => {
-  if (!str) return new Date();
-  const utc = new Date(str);
-  return new Date(utc.getTime() + 7 * 60 * 60 * 1000);
+export const parseLocalDate = (value) => {
+  if (!value) return new Date();
+  if (value instanceof Date) return value;
+
+  const raw = String(value).trim();
+  const hasExplicitTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(raw);
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(hasExplicitTimezone ? normalized : `${normalized}+07:00`);
+
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 export const mapSensorToCards = (data = {}, threshold = {}) => {
