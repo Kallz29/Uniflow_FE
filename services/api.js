@@ -127,7 +127,7 @@ export const getDeviceById = (id) =>
 
 /** POST /api/devices */
 export const createDevice = (deviceData) =>
-  apiClient.post('/devices', deviceData, { tag: 'createDevice' });
+  apiClient.post('/devices', { status: 'inactive', ...deviceData }, { tag: 'createDevice' });
 
 /**
  * PUT /api/devices/:id

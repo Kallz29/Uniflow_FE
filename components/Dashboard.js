@@ -1457,18 +1457,24 @@ export default function Dashboard({ onNavigateToAbout, onNavigateToAI, onNavigat
                       setAddingDevice(true);
                       setDeviceMsg(null);
                       try {
-                        await createDevice({
+                        const createRes = await createDevice({
                           device_code: code,
                           location: newDeviceLocation.trim(),
                           status: 'inactive',
                         });
+                        const createdDevice = createRes?.data || createRes;
+                        if (createdDevice?.id) {
+                          await updateDevice(createdDevice.id, { status: 'inactive' });
+                        }
                         setDeviceMsg({ type: 'ok', text: 'Device berhasil ditambahkan!' });
                         setShowAddDevice(false);
                         setNewDeviceCode('');
                         setNewDeviceLocation('');
                         const res = await getAllDevices();
                         const nextDevices = normalizeDevices(res.data || []).map((device) => (
-                          device.device_code === code ? { ...device, status: 'inactive' } : device
+                          device.id === createdDevice?.id || device.device_code === code
+                            ? { ...device, status: 'inactive' }
+                            : device
                         ));
                         setDevices(nextDevices);
                         setEditingLocation(buildEditingLocation(nextDevices));
