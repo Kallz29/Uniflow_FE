@@ -8,17 +8,94 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { teamMembers } from '../data/teamMembers';
+import { lecturerMembers, studentMembers } from '../data/teamMembers';
 import { aboutUsStyles as styles, SNAP_INTERVAL } from '../styles/aboutUsStyles';
 
 export default function AboutUs({ onBack }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [studentIndex, setStudentIndex] = useState(0);
+  const [lecturerIndex, setLecturerIndex] = useState(0);
 
-  const handleScroll = (event) => {
+  const getScrollIndex = (event) => {
     const offset = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offset / SNAP_INTERVAL);
-    setCurrentIndex(index);
+    return Math.round(offset / SNAP_INTERVAL);
   };
+
+  const renderMemberCarousel = (
+    title,
+    subtitle,
+    members,
+    currentIndex,
+    onIndexChange,
+    idLabel,
+    imageResizeMode = 'cover'
+  ) => (
+    <View style={styles.carouselSection}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        pagingEnabled={false}
+        decelerationRate="fast"
+        snapToInterval={SNAP_INTERVAL}
+        snapToAlignment="start"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.carouselContent}
+        onScroll={(event) => onIndexChange(getScrollIndex(event))}
+        scrollEventThrottle={16}
+      >
+        {members.map((member) => (
+          <View key={member.id} style={styles.slide}>
+            <View style={styles.card}>
+
+              <View style={styles.imageSection}>
+                {member.image ? (
+                  <Image
+                    source={member.image}
+                    style={[
+                      styles.image,
+                      imageResizeMode === 'contain' && styles.containImage,
+                    ]}
+                    resizeMode={imageResizeMode}
+                  />
+                ) : (
+                  <View style={styles.placeholderImage}>
+                    <Ionicons name="person-outline" size={46} color="#5AA3C8" />
+                  </View>
+                )}
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.32)']}
+                  style={styles.imageOverlay}
+                />
+                <Text style={styles.decoNumber}>0{member.id}</Text>
+              </View>
+
+              <View style={styles.cardContent}>
+                <View style={styles.cardAccentBar} />
+                <Text style={styles.memberName}>{member.name}</Text>
+                <View style={styles.nimRow}>
+                  <Ionicons name="card-outline" size={12} color="#8BAFC0" />
+                  <Text style={styles.nimText}>{idLabel}: {member.nim || member.nip || '-'}</Text>
+                </View>
+              </View>
+
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+
+      <View style={styles.dotsContainer}>
+        {members.map((_, index) => (
+          <View
+            key={index}
+            style={[styles.dot, currentIndex === index && styles.activeDot]}
+          />
+        ))}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -56,58 +133,24 @@ export default function AboutUs({ onBack }) {
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        {/* Carousel */}
-        <View style={styles.carouselSection}>
-          <ScrollView
-            horizontal
-            pagingEnabled={false}
-            decelerationRate="fast"
-            snapToInterval={SNAP_INTERVAL}
-            snapToAlignment="start"
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.carouselContent}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-          >
-            {teamMembers.map((member) => (
-              <View key={member.id} style={styles.slide}>
-                <View style={styles.card}>
+        {renderMemberCarousel(
+          'Tim Dosen',
+          'Pembimbing dan pengarah penelitian',
+          lecturerMembers,
+          lecturerIndex,
+          setLecturerIndex,
+          'NIP',
+          'contain'
+        )}
 
-                  {/* Foto */}
-                  <View style={styles.imageSection}>
-                    <Image source={member.image} style={styles.image} />
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.32)']}
-                      style={styles.imageOverlay}
-                    />
-                    <Text style={styles.decoNumber}>0{member.id}</Text>
-                  </View>
-
-                  {/* Info */}
-                  <View style={styles.cardContent}>
-                    <View style={styles.cardAccentBar} />
-                    <Text style={styles.memberName}>{member.name}</Text>
-                    <View style={styles.nimRow}>
-                      <Ionicons name="card-outline" size={12} color="#8BAFC0" />
-                      <Text style={styles.nimText}>{member.nim}</Text>
-                    </View>
-                  </View>
-
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Dots */}
-          <View style={styles.dotsContainer}>
-            {teamMembers.map((_, index) => (
-              <View
-                key={index}
-                style={[styles.dot, currentIndex === index && styles.activeDot]}
-              />
-            ))}
-          </View>
-        </View>
+        {renderMemberCarousel(
+          'Tim Mahasiswa',
+          'Pengembang sistem monitoring kualitas air',
+          studentMembers,
+          studentIndex,
+          setStudentIndex,
+          'NIM'
+        )}
 
         {/* Info card */}
         <View style={styles.infoCard}>

@@ -87,6 +87,20 @@ export const aboutUsStyles = StyleSheet.create({
   carouselSection: {
     paddingTop: 20,
   },
+  sectionHeader: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1A3040',
+  },
+  sectionSubtitle: {
+    fontSize: 11,
+    color: '#6B8FA3',
+    marginTop: 3,
+  },
   carouselContent: {
     paddingLeft: 20,
     paddingRight: 36,
@@ -118,6 +132,16 @@ export const aboutUsStyles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  containImage: {
+    backgroundColor: '#FFFFFF',
+  },
+  placeholderImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#EAF4FB',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   imageOverlay: {
     position: 'absolute',
