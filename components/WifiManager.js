@@ -4,9 +4,11 @@ import {
   ActivityIndicator, Animated, Modal, Platform,
   KeyboardAvoidingView, AppState,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getAllDevices, getLatestSensor, getSensorStats } from '../services/api';
 
 // ─── Konfigurasi ────────────────────────────────────────────
 const ESP_IP        = '192.168.4.1';
@@ -17,6 +19,8 @@ const SCAN_INTERVAL = 15000;
 // ESP32 butuh ~8-12 detik untuk proses WPA handshake + DHCP
 const CONNECT_POLL_INTERVAL = 2000;   // cek status tiap 2 detik
 const CONNECT_POLL_TIMEOUT  = 20000;  // total tunggu max 20 detik
+const LAST_CONNECTED_SSID_KEY = 'uniflow:last-connected-ssid';
+const FALLBACK_CONNECTED_LABEL = 'WiFi tersambung';
 
 // ─── API helpers ────────────────────────────────────────────
 const espFetch = async (path, options = {}, timeoutMs = 12000) => {
@@ -56,6 +60,46 @@ const getLocalIpAddress = async () => {
 };
 
 const isOnEspSetupNetwork = (ip) => ip?.startsWith('192.168.4.');
+
+const saveConnectedSsid = async (ssid) => {
+  if (!ssid) return;
+  try { await AsyncStorage.setItem(LAST_CONNECTED_SSID_KEY, ssid); }
+  catch {}
+};
+
+const getSavedConnectedSsid = async () => {
+  try { return await AsyncStorage.getItem(LAST_CONNECTED_SSID_KEY); }
+  catch { return null; }
+};
+
+const clearSavedConnectedSsid = async () => {
+  try { await AsyncStorage.removeItem(LAST_CONNECTED_SSID_KEY); }
+  catch {}
+};
+
+const hasDataPayload = (res) => {
+  const data = res?.data;
+  if (Array.isArray(data)) return data.length > 0;
+  return !!data && Object.keys(data).length > 0;
+};
+
+const checkBackendDeviceOnline = async () => {
+  const [latestRes, statsRes, devicesRes] = await Promise.allSettled([
+    getLatestSensor(),
+    getSensorStats(),
+    getAllDevices(),
+  ]);
+
+  const latestOk = latestRes.status === 'fulfilled' && hasDataPayload(latestRes.value);
+  const statsOk = statsRes.status === 'fulfilled' && hasDataPayload(statsRes.value);
+  const devices = devicesRes.status === 'fulfilled' ? (devicesRes.value?.data || []) : [];
+  const activeDevice = devices.find((device) => device?.status === 'active');
+
+  return {
+    connected: !!activeDevice && (latestOk || statsOk),
+    device: activeDevice || null,
+  };
+};
 
 const scanNetworks = async (retryCount = 0) => {
   const MAX_RETRY   = 8;
@@ -583,17 +627,21 @@ export default function WiFiManager({ onConnected }) {
   const appStateRef   = useRef(AppState.currentState);
 
   const handleEspConnected = useCallback((ssid, { autoNavigate = false } = {}) => {
+    const displaySsid = ssid || FALLBACK_CONNECTED_LABEL;
     clearInterval(keepAliveRef.current);
     setScanError(null);
     setSetupWarning(null);
     setScanHint(null);
+    setRetryInfo(null);
+    setScanning(false);
     setWifiStatus((prev) => ({
       ...(prev || {}),
       connected: true,
-      ssid,
+      ssid: displaySsid,
     }));
     setEspConnected(true);
-    setEspConnectedSsid(ssid);
+    setEspConnectedSsid(displaySsid);
+    if (ssid) saveConnectedSsid(ssid);
     if (autoNavigate) {
       setTimeout(() => onConnected?.(), 1500);
     }
@@ -648,9 +696,6 @@ export default function WiFiManager({ onConnected }) {
       const ipAddress = await getLocalIpAddress();
       setLocalIp(ipAddress);
       const connectedToEspAp = isOnEspSetupNetwork(ipAddress);
-      if (!connectedToEspAp) {
-        setSetupWarning('HP belum berada di WiFi UniFlow-Setup. Hubungkan dulu ke jaringan setup ESP32, lalu tekan Refresh.');
-      }
 
       let scanResult   = { networks: [] };
       let statusResult = null;
@@ -671,6 +716,26 @@ export default function WiFiManager({ onConnected }) {
         handleEspConnected(statusResult.ssid, { autoNavigate: false });
         setScanning(false);
         return;
+      }
+
+      try {
+        setScanHint('Mengecek status device di server...');
+        const backendStatus = await checkBackendDeviceOnline();
+        if (backendStatus.connected) {
+          const savedSsid = await getSavedConnectedSsid();
+          handleEspConnected(savedSsid, { autoNavigate: false });
+          setScanHint(null);
+          setScanning(false);
+          return;
+        }
+      } catch {
+        // Backend belum bisa dipakai sebagai bukti koneksi, lanjut scan ESP setup.
+      } finally {
+        setScanHint(null);
+      }
+
+      if (!connectedToEspAp) {
+        setSetupWarning('HP belum berada di WiFi UniFlow-Setup. Hubungkan dulu ke jaringan setup ESP32, lalu tekan Refresh.');
       }
 
       try {
@@ -784,8 +849,10 @@ export default function WiFiManager({ onConnected }) {
     setDisconnecting(true);
     try {
       await disconnectWifi();
+      await clearSavedConnectedSsid();
       setWifiStatus(null);
-      doScan();
+      setEspConnected(false);
+      setEspConnectedSsid(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -970,18 +1037,45 @@ export default function WiFiManager({ onConnected }) {
               </Text>
               <Text style={{ fontSize: 12, color: '#16A34A' }}>ESP32 telah terhubung ke jaringan WiFi</Text>
             </View>
-            <TouchableOpacity
-              onPress={() => onConnected?.()}
-              style={{
-                marginTop: 2,
-                backgroundColor: '#22C55E',
-                borderRadius: 12,
-                paddingHorizontal: 18,
-                paddingVertical: 10,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Kembali ke Dashboard</Text>
-            </TouchableOpacity>
+            <View style={{ width: '100%', gap: 10, marginTop: 2 }}>
+              <TouchableOpacity
+                onPress={handleDisconnect}
+                disabled={disconnecting}
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: '#DC2626',
+                  backgroundColor: '#FEF2F2',
+                  borderRadius: 12,
+                  paddingVertical: 11,
+                  alignItems: 'center',
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  gap: 7,
+                }}
+              >
+                {disconnecting ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <Ionicons name="power-outline" size={15} color="#DC2626" />
+                )}
+                <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '800' }}>
+                  {disconnecting ? 'Memutuskan...' : 'Disconnect ESP32'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => onConnected?.()}
+                style={{
+                  backgroundColor: '#22C55E',
+                  borderRadius: 12,
+                  paddingHorizontal: 18,
+                  paddingVertical: 10,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Kembali ke Dashboard</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : scanError ? (
           <View style={{
