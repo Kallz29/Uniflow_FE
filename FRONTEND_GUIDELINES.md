@@ -2,11 +2,11 @@
 
 React Native Expo Mobile Application
 
-Versi 1.0 - Juni 2026
+Versi 1.1 - Juni 2026
 
 ## Overview
 
-UniFlow Frontend adalah aplikasi mobile berbasis Expo React Native untuk monitoring kualitas air real-time. Aplikasi ini terhubung ke backend UniFlow dan ESP32 untuk menampilkan data sensor, Water Quality Index (WQI), riwayat parameter, notifikasi alert, sesi pengukuran, konfigurasi perangkat, WiFi Manager, dan AI Assistant.
+UniFlow Frontend adalah aplikasi mobile berbasis Expo React Native untuk monitoring kualitas air real-time. Aplikasi terhubung ke backend UniFlow dan ESP32 untuk menampilkan data sensor, Water Quality Index (WQI), riwayat, alert, sesi pengukuran, pengaturan perangkat, WiFi Manager, About Us, Quick Tour, dan AI Assistant.
 
 Platform utama: Android
 
@@ -16,49 +16,46 @@ Backend Base URL: `https://api.uniflow.me/api`
 
 ESP32 Setup API: `http://192.168.4.1/api/wifi`
 
-Format Data: JSON
+Format data: JSON
 
-Timezone Tampilan: WIB / `id-ID`
+Bahasa UI: Indonesia formal
 
 ## 1. Struktur Project
 
-Struktur utama aplikasi:
-
 | Path | Fungsi |
 | --- | --- |
-| `App.js` | Routing screen utama aplikasi |
-| `components/Dashboard.js` | Dashboard monitoring, WQI, alerts, settings, device modal |
-| `components/MeasurementScreen.js` | Start/stop sesi pengukuran dan live data saat sesi aktif |
-| `components/HistoryModal.js` | Riwayat parameter, filter lokasi/tanggal/jam, export CSV |
+| `App.js` | Routing screen utama berbasis state |
+| `components/Dashboard.js` | Dashboard monitoring, WQI, alert, settings, threshold, device modal |
+| `components/MeasurementScreen.js` | Start/stop sesi pengukuran dan live data |
+| `components/HistoryModal.js` | Riwayat parameter, filter, marker sesi, export CSV |
 | `components/WifiManager.js` | Konfigurasi WiFi ESP32 melalui AP `UniFlow-Setup` |
-| `components/AIAssistant.js` | Chat AI, sesi chat, history pesan |
+| `components/AIAssistant.js` | Chat AI berbasis backend session |
 | `components/QuickTour.js` | Panduan penggunaan aplikasi |
 | `components/SplashScreen.js` | Splash/loading awal aplikasi |
+| `components/AboutUs.js` | Informasi tim |
+| `components/ErrorBoundary.js` | Fallback error UI |
 | `services/api.js` | Wrapper endpoint backend |
-| `services/espWifi.js` | Helper endpoint WiFi ESP32 |
-| `services/espDevice.js` | Helper cek koneksi ESP32 |
-| `utils/apiClient.js` | HTTP client utama dengan timeout dan error normalization |
-| `utils/waterQuality.js` | Mapping data sensor, status, threshold, WQI helpers |
+| `services/espWifi.js` | Wrapper endpoint WiFi ESP32 |
+| `services/espDevice.js` | Deteksi ESP32 mode setup |
+| `utils/apiClient.js` | HTTP client, timeout, dan normalisasi error |
+| `utils/errorHandler.js` | AppError, pesan user, dan logging |
+| `utils/waterQuality.js` | Mapping sensor, status, WQI, threshold, date helper |
 | `utils/dashboardCache.js` | Cache snapshot dashboard |
 | `styles/` | StyleSheet per komponen |
-| `assets/` | Logo, app icon, dan gambar |
+| `constants/colors.js` | Palet warna aplikasi |
+| `assets/` | Logo, icon, dan gambar tim |
 
 ## 2. Konfigurasi Aplikasi
 
-### Backend URL
-
-Konfigurasi backend berada di:
+Backend URL berada di `config.js`:
 
 ```js
-// config.js
 export const BASE_URL = 'https://api.uniflow.me/api';
 ```
 
-Semua request backend harus lewat `services/api.js` atau `utils/apiClient.js`.
+Semua request backend harus lewat `services/api.js` dan `utils/apiClient.js`.
 
-### Expo Config
-
-File utama:
+File konfigurasi Expo:
 
 - `app.json`
 - `eas.json`
@@ -66,70 +63,73 @@ File utama:
 
 Catatan:
 
-- `app.json` tidak boleh memakai field yang tidak valid pada schema Expo.
-- Cleartext HTTP untuk ESP32 tidak ditaruh langsung di `android.usesCleartextTraffic`, tetapi diatur melalui `app.plugin.js`.
-- `icon` dan `android.adaptiveIcon.foregroundImage` harus memakai asset square.
+- `app.json` harus valid terhadap schema Expo.
+- Cleartext HTTP untuk ESP32 diatur melalui `app.plugin.js`.
+- `icon` dan `android.adaptiveIcon.foregroundImage` memakai asset square.
+- Android package: `com.uniflow.mobile`.
+- Version app saat ini: `1.0.2`, Android `versionCode` 3.
 
 ## 3. Routing dan Screen
 
-Routing masih dikelola sederhana di `App.js` menggunakan state `currentScreen`.
-
-Screen utama:
+Routing dikelola di `App.js` melalui state `currentScreen` dan object `SCREENS`.
 
 | Screen Key | Component | Deskripsi |
 | --- | --- | --- |
 | `splash` | `SplashScreen` | Tampilan awal aplikasi |
 | `dashboard` | `Dashboard` | Home monitoring |
-| `about` | `AboutUs` | Informasi tim/profil |
-| `ai` | `AIAssistant` | Chatbot UniFlow |
-| `wifi` | `WifiManager` | Konfigurasi WiFi ESP32 |
+| `about` | `AboutUs` | Informasi tim |
+| `ai-assistant` | `AIAssistant` | Chatbot UniFlow |
+| `wifi-manager` | `WifiManager` | Konfigurasi WiFi ESP32 |
 | `measurement` | `MeasurementScreen` | Sesi pengukuran |
+
+Setelah splash, aplikasi membuka `wifi-manager`.
 
 Prinsip routing:
 
-- Gunakan callback `onNavigate...` dari parent untuk pindah screen.
-- Jangan membuat navigation state tersebar di banyak komponen.
-- Screen yang membutuhkan back action menerima callback `onBack`.
+- Gunakan callback dari parent untuk pindah screen.
+- Jangan menyebar navigation state ke banyak komponen.
+- Screen yang butuh kembali menerima callback seperti `onBack`.
+- Screen WiFi memakai callback `onConnected`.
 
 ## 4. Dashboard
 
 Dashboard adalah pusat monitoring kualitas air.
 
-Endpoint yang digunakan:
+Endpoint utama:
 
 | Endpoint | Fungsi |
 | --- | --- |
 | `GET /sensors/latest` | Data sensor terbaru |
-| `GET /sensors?limit=100` | Riwayat ringkas untuk chart/history |
+| `GET /sensors?limit=100` | Riwayat ringkas |
 | `GET /sensors/stats` | Statistik rata-rata |
 | `GET /alerts?limit=20` | Notifikasi alert |
 | `GET /threshold` | Batas normal parameter |
 | `GET /devices` | Status perangkat |
-| `GET /measurements` | Sesi pengukuran aktif |
+| `GET /measurements` | Sesi pengukuran |
 
 UI utama:
 
 - WQI card untuk kualitas air keseluruhan.
-- Average stats strip untuk WQI, pH, suhu, TDS, dan NTU.
+- Average stats untuk WQI, pH, suhu, TDS, dan NTU.
 - Tombol Start/Stop sesi.
 - Parameter cards untuk pH, suhu, TDS, dan kekeruhan.
 - Alert modal.
 - Settings modal.
 - Device modal.
 - Threshold modal.
+- Shortcut AI Assistant, WiFi Manager, About Us, dan Measurement.
 
 Guideline:
 
-- Dashboard harus tetap bisa tampil walau salah satu endpoint sekunder gagal.
-- Gunakan snapshot cache untuk fallback saat backend tidak dapat dijangkau.
-- Jangan tampilkan status device berulang di setiap parameter card. Gunakan satu indikator global.
-- Status terbaru ditampilkan dengan format ringkas seperti `Diperbarui Baru saja`.
+- Dashboard harus tetap bisa tampil walau endpoint sekunder gagal.
+- Gunakan snapshot cache untuk fallback ketika backend tidak dapat dijangkau.
+- Jangan menampilkan status perangkat berulang di setiap parameter card.
+- Status terbaru harus ringkas dan mudah dipindai.
+- Pesan error harus berasal dari `toUserMessage`, bukan error mentah fetch.
 
 ## 5. Parameter Air
 
-Parameter yang ditampilkan:
-
-| Parameter | Field Backend | Unit | Normalisasi UI |
+| Parameter | Field Backend | Unit | Format UI |
 | --- | --- | --- | --- |
 | pH | `ph` | pH | 1 desimal |
 | Suhu | `temperature` | Celsius | 1 desimal |
@@ -138,10 +138,10 @@ Parameter yang ditampilkan:
 
 Guideline:
 
-- Gunakan helper `mapSensorToCards` dari `utils/waterQuality.js`.
-- Gunakan threshold aktif untuk menentukan status parameter.
+- Gunakan helper dari `utils/waterQuality.js`.
+- Threshold aktif menentukan status parameter.
 - Tap parameter card membuka `HistoryModal`.
-- Hindari label teknis yang tidak familiar untuk user akhir kecuali diperlukan.
+- Hindari istilah teknis berlebihan di UI user akhir.
 
 ## 6. Measurement Sessions
 
@@ -152,52 +152,34 @@ Endpoint:
 | Endpoint | Fungsi |
 | --- | --- |
 | `GET /devices` | Pilih perangkat |
-| `PUT /devices/:id` | Update lokasi perangkat sebelum sesi |
+| `PUT /devices/:id` | Update lokasi perangkat |
 | `POST /measurements/start` | Mulai sesi |
 | `POST /measurements/stop` | Stop sesi |
 | `GET /measurements` | Verifikasi sesi aktif |
 | `GET /sensors/latest` | Live data saat sesi |
 
-Alur UI:
+Alur:
 
 1. User membuka halaman sesi.
-2. User memilih device yang aktif.
+2. User memilih device aktif.
 3. User mengisi lokasi pengukuran.
 4. Frontend update lokasi device.
-5. Frontend memanggil start measurement.
-6. Saat sesi aktif, tombol berubah menjadi Stop dan durasi berjalan.
+5. Frontend memulai measurement.
+6. Saat sesi aktif, durasi berjalan.
 7. User menekan Stop untuk menyelesaikan sesi.
 
-Guideline implementasi:
+Guideline:
 
 - Device dengan `status: active` boleh dipilih.
-- Jangan memaksa device menjadi offline hanya karena `last_seen` kosong bila backend mengirim `status: active`.
-- Start/stop measurement memakai timeout lebih panjang karena ini aksi penting.
-- Jika start request gagal, lakukan verifikasi ulang dengan `GET /measurements` sebelum menampilkan error.
-- Durasi dihitung di frontend dari `start_time`.
-- Timestamp backend tanpa timezone harus diperlakukan konsisten agar durasi tidak macet.
-
-Status UI:
-
-| Kondisi | Tampilan |
-| --- | --- |
-| Tidak ada sesi aktif | Tombol Start biru |
-| Sesi aktif | Tombol Stop merah/rose, durasi dan lokasi tampil center |
-| Request berjalan | Loading indicator pada tombol |
-| Request gagal | Alert formal dengan instruksi koneksi |
+- Jangan memaksa device menjadi offline hanya karena `last_seen` kosong jika backend mengirim `status: active`.
+- Start/stop memakai timeout lebih panjang.
+- Jika request start/stop gagal, verifikasi ulang sesi aktif sebelum menampilkan error final.
+- Durasi dihitung dari `start_time` dan diperbarui tiap detik.
+- Timestamp backend tanpa timezone harus diparse konsisten.
 
 ## 7. History dan Export CSV
 
 Komponen: `components/HistoryModal.js`
-
-Fitur:
-
-- Menampilkan data maksimal 100 baris di UI.
-- Filter lokasi.
-- Filter rentang tanggal.
-- Filter rentang jam.
-- Export CSV dari backend.
-- Menampilkan marker sesi melalui data measurement.
 
 Endpoint:
 
@@ -207,45 +189,49 @@ Endpoint:
 | `GET /sensors/export/csv?...` | Export seluruh data sesuai filter |
 | `GET /measurements` | Mapping data ke sesi |
 
+Fitur:
+
+- Menampilkan maksimal 100 data di UI.
+- Filter lokasi.
+- Filter rentang tanggal.
+- Filter rentang jam.
+- Export CSV dari backend.
+- Marker sesi melalui data measurement.
+
 Guideline:
 
-- UI list dibatasi agar performa mobile tetap ringan.
-- Export CSV harus menggunakan endpoint backend, bukan CSV lokal dari 100 data yang tampil.
-- Label tombol filter harus formal. Hindari wording seperti `Pilih filter dulu`; gunakan `Tentukan filter untuk melanjutkan`.
-- Input jam harus bisa diketik manual dan dinormalisasi ke rentang 0-23.
-- Jika tidak ada data sesuai filter, tampilkan empty state dan tombol hapus filter.
+- UI list dibatasi untuk performa mobile.
+- Export CSV harus dari backend, bukan dari 100 data yang sedang tampil.
+- Input jam bisa diketik manual dan dinormalisasi ke rentang 0-23.
+- Empty state harus menyediakan aksi hapus filter.
+- Wording filter harus formal dan jelas.
 
-## 8. Alerts dan Notifikasi
-
-Komponen utama: `Dashboard.js`
+## 8. Alerts
 
 Endpoint:
 
 | Endpoint | Fungsi |
 | --- | --- |
-| `GET /alerts?limit=20` | Ambil daftar alert |
+| `GET /alerts?unread=true&limit=N` | Ambil alert |
 | `PATCH /alerts/:id/read` | Tandai satu alert dibaca |
 | `PATCH /alerts/read-all` | Tandai semua alert dibaca |
 
 Mapping severity:
 
-| Severity | Warna Utama | UI |
-| --- | --- | --- |
-| `warning` | Kuning/oranye | Peringatan |
-| `danger` | Merah | Bahaya |
-| `critical` | Merah pekat | Kritis |
+| Severity | Tampilan |
+| --- | --- |
+| `warning` | Peringatan |
+| `danger` | Bahaya |
+| `critical` | Kritis |
 
 Guideline:
 
-- Alert unread ditampilkan lebih menonjol.
+- Alert unread tampil lebih menonjol.
 - Gunakan badge `BARU` untuk alert unread.
-- Pesan alert harus tetap terbaca, jangan terlalu padat.
 - Mark as read dipicu saat alert disentuh.
-- Gunakan tombol `Tandai semua dibaca` saat ada unread count.
+- Sediakan `Tandai semua dibaca` saat ada unread count.
 
 ## 9. Device Management
-
-Komponen: Device modal di `Dashboard.js`
 
 Endpoint:
 
@@ -253,37 +239,37 @@ Endpoint:
 | --- | --- |
 | `GET /devices` | List perangkat |
 | `POST /devices` | Tambah perangkat |
-| `PUT /devices/:id` | Update nama/lokasi/status |
+| `PUT /devices/:id` | Update nama, lokasi, atau status |
 | `DELETE /devices/:id` | Hapus perangkat |
 
 Guideline:
 
-- Device baru dari frontend harus tampil offline/inactive sampai backend menerima data MQTT dari device.
-- Device yang sudah mengirim data akan berubah active dari backend.
+- Device baru dari frontend dibuat dengan `status: inactive`.
+- Device berubah active berdasarkan backend setelah menerima data dari perangkat.
 - Kode device hanya boleh huruf, angka, dash, dan underscore.
 - Hapus device harus memakai confirmation dialog.
-- Device list harus menampilkan nama device, lokasi, dan status.
+- Device list menampilkan nama, kode/lokasi, dan status.
 
 ## 10. WiFi Manager ESP32
 
 Komponen: `components/WifiManager.js`
 
-ESP32 base URL:
+Base URL:
 
 ```txt
 http://192.168.4.1/api/wifi
 ```
 
-Endpoint ESP32:
+Endpoint:
 
 | Endpoint | Method | Fungsi |
 | --- | --- | --- |
 | `/scan` | GET | Scan jaringan WiFi |
 | `/status` | GET | Cek status WiFi ESP32 |
-| `/connect` | POST | Kirim SSID/password ke ESP32 |
+| `/connect` | POST | Kirim SSID/password |
 | `/disconnect` | POST | Disconnect WiFi ESP32 |
 
-Response `/status` dari IoT:
+Response `/status`:
 
 ```json
 {
@@ -298,16 +284,19 @@ Response `/status` dari IoT:
 
 Guideline:
 
-- Saat ESP32 sudah connected, tampilkan status `Connected - SSID`.
-- Jangan auto redirect saat user membuka WiFi Manager dan ESP32 sudah connected; beri tombol kembali ke Dashboard.
-- Saat user baru selesai connect lewat modal, boleh redirect ke Dashboard setelah pesan sukses singkat.
-- Gunakan polling `/status` setelah POST `/connect`.
-- Anggap request ke ESP32 bisa putus saat ESP32 berpindah jaringan; lanjutkan polling sebelum menyatakan gagal.
-- Tampilkan instruksi agar HP terhubung ke `UniFlow-Setup`, data seluler/VPN dimatikan sementara, dan pilih tetap terhubung bila Android memberi warning WiFi tanpa internet.
+- Instruksikan user menghubungkan HP ke `UniFlow-Setup`.
+- Minta user mematikan data seluler/VPN sementara jika koneksi ESP32 sulit.
+- Gunakan polling `/status` setelah `/connect`.
+- Request ke ESP32 boleh putus saat perangkat pindah jaringan; lanjutkan polling sebelum menyatakan gagal.
+- `Connection: close` harus dipertahankan di request ESP32 untuk menghindari hang.
+- Jangan auto redirect hanya karena ESP32 sudah connected saat user membuka WiFi Manager.
+- Setelah user berhasil connect lewat modal, boleh kembali ke Dashboard setelah pesan sukses singkat.
 
 ## 11. AI Assistant
 
 Komponen: `components/AIAssistant.js`
+
+AI Assistant memakai backend chat session.
 
 Endpoint:
 
@@ -315,6 +304,8 @@ Endpoint:
 | --- | --- |
 | `POST /chat/sessions` | Buat sesi chat |
 | `GET /chat/sessions` | List sesi |
+| `PATCH /chat/sessions/:id` | Update judul sesi |
+| `PUT /chat/sessions/:id` | Fallback update judul |
 | `GET /chat/sessions/:id/messages` | Ambil history pesan |
 | `POST /chat/sessions/:id/messages` | Kirim pesan |
 | `DELETE /chat/sessions/:id` | Hapus sesi |
@@ -322,10 +313,15 @@ Endpoint:
 Guideline:
 
 - User message di kanan, AI response di kiri.
-- Tampilkan loading saat menunggu AI response.
-- Sediakan new chat dan delete session.
-- Error AI harus tampil sebagai pesan ramah, bukan stack trace.
-- Gunakan title default formal seperti `Sesi Baru`.
+- Tampilkan loading saat menunggu respons AI.
+- Sediakan drawer riwayat chat.
+- Sediakan tombol `+ Baru`.
+- Hapus sesi harus memakai modal konfirmasi.
+- Error AI tampil sebagai pesan ramah.
+- Judul default formal: `Sesi Baru`.
+- Judul sesi diperbarui dari pesan pertama user.
+- Jangan menambahkan AI mock keyword di komponen produksi.
+- Respons markdown boleh dibersihkan sebelum tampil jika styling markdown belum didukung.
 
 ## 12. Error Handling
 
@@ -337,35 +333,25 @@ Jenis error:
 | --- | --- |
 | Timeout | `Permintaan memakan waktu terlalu lama. Periksa koneksi lalu coba lagi.` |
 | Network error | `Tidak dapat terhubung ke server. Periksa koneksi internet perangkat Anda.` |
-| HTTP error dari backend | Gunakan `message` atau `error` dari response |
+| HTTP error backend | Gunakan `message` atau `error` dari response |
 | Unknown error | Gunakan fallback sesuai konteks |
 
 Guideline:
 
-- Jangan tampilkan error mentah seperti `TypeError: Network request failed`.
-- Gunakan `toUserMessage(err, fallback)` untuk pesan user.
-- Gunakan `logError(tag, err)` untuk debug di mode development.
-- Untuk aksi penting seperti start/stop sesi, lakukan retry atau verifikasi ulang jika memungkinkan.
+- Jangan tampilkan `TypeError: Network request failed` ke user.
+- Gunakan `toUserMessage(err, fallback)`.
+- Gunakan `logError(tag, err)` untuk debug.
+- Untuk aksi penting, lakukan retry atau verifikasi ulang jika memungkinkan.
 
 ## 13. Data Formatting
 
-### Tanggal dan Waktu
-
-Gunakan format `id-ID`.
-
-Contoh:
+Gunakan locale `id-ID`.
 
 ```js
 new Date(value).toLocaleString('id-ID')
 ```
 
-Guideline:
-
-- Tampilkan waktu relatif di dashboard bila memungkinkan: `Baru saja`, `5 menit lalu`.
-- Untuk sesi, tampilkan tanggal mulai dan durasi.
-- Durasi sesi dihitung di frontend dan diperbarui tiap 1 detik.
-
-### Angka Sensor
+Format angka:
 
 | Data | Format |
 | --- | --- |
@@ -375,6 +361,12 @@ Guideline:
 | TDS | `toFixed(0)` |
 | NTU | `toFixed(1)` |
 
+Guideline:
+
+- Tampilkan waktu relatif di dashboard jika memungkinkan.
+- Tampilkan durasi sesi dan waktu mulai.
+- Gunakan `parseLocalDate` untuk timestamp backend yang perlu distabilkan.
+
 ## 14. Design System
 
 Palet utama:
@@ -382,6 +374,7 @@ Palet utama:
 | Token | Warna | Penggunaan |
 | --- | --- | --- |
 | Primary | `#5AA3C8` | Tombol utama, icon, highlight |
+| Primary Light | `#7CB9D8` | Splash/header variasi |
 | Primary Dark | `#3E8FB8` | Gradient/header |
 | Background | `#F0F7FB` | Background screen |
 | Text Dark | `#1A3040` | Judul dan teks utama |
@@ -392,12 +385,13 @@ Palet utama:
 
 Guideline UI:
 
-- Gunakan rounded card konsisten pada radius 12-16.
 - Gunakan icon dari `@expo/vector-icons/Ionicons`.
 - Tombol destructive seperti Stop/Hapus memakai merah/rose.
 - Tombol utama memakai biru UniFlow.
-- Hindari indikator status berulang di banyak card; gunakan satu indikator global bila statusnya mewakili keseluruhan device.
-- Teks aplikasi harus formal dan jelas.
+- Gunakan card radius konsisten sesuai style existing.
+- Hindari status yang berulang di banyak card.
+- Teks harus formal, jelas, dan tidak terlalu panjang.
+- Pastikan teks tombol tidak terpotong di layar kecil.
 
 ## 15. Build dan Validation
 
@@ -406,6 +400,7 @@ Script:
 ```bash
 npm install
 npm start
+npm run android
 npm run web
 npm run build
 ```
@@ -416,18 +411,18 @@ EAS:
 eas build -p android --profile preview
 ```
 
-Validation checklist:
+Checklist:
 
 - `npm run build` sukses.
-- `npx expo-doctor` lulus semua check.
+- `npx expo-doctor` lulus.
 - `app.json` valid.
-- Asset icon aplikasi berbentuk square.
-- `.expo/` tidak tracked oleh Git.
+- Asset icon aplikasi square.
+- `.expo/` tidak tracked.
 - `dist/` tidak ikut commit kecuali memang dibutuhkan.
 
 ## 16. Git dan File Output
 
-File yang sebaiknya tidak di-commit:
+Jangan commit:
 
 - `node_modules/`
 - `.expo/`
@@ -436,7 +431,7 @@ File yang sebaiknya tidak di-commit:
 - `.env`
 - file cache lokal
 
-File yang boleh di-commit:
+Boleh commit:
 
 - Source code `components/`, `services/`, `utils/`, `styles/`
 - `app.json`
@@ -444,15 +439,16 @@ File yang boleh di-commit:
 - `eas.json`
 - `package.json`
 - `package-lock.json`
-- asset aplikasi yang dipakai
-- dokumentasi `.md`
+- Asset aplikasi yang dipakai
+- Dokumentasi `.md`
 
 ## 17. Rekomendasi Pengembangan
 
 - Pisahkan logic API dari UI component.
-- Gunakan helper di `utils/waterQuality.js` untuk mapping sensor.
-- Jangan menambahkan dependency baru tanpa kebutuhan jelas.
-- Untuk perubahan UI besar, validasi di viewport mobile terlebih dahulu.
-- Untuk flow IoT/WiFi, selalu anggap koneksi bisa putus saat ESP32 berpindah jaringan.
-- Untuk flow measurement, selalu verifikasi ulang sesi aktif setelah request gagal sebelum menampilkan error final.
+- Gunakan helper di `utils/waterQuality.js` untuk mapping sensor dan formatting.
+- Jangan menambah dependency baru tanpa kebutuhan jelas.
+- Untuk perubahan UI besar, validasi di layar mobile terlebih dahulu.
+- Untuk flow IoT/WiFi, anggap koneksi bisa putus saat ESP32 berpindah jaringan.
+- Untuk flow measurement, verifikasi ulang sesi aktif setelah request gagal.
+- Untuk AI Assistant, pertahankan session-based backend flow.
 - Untuk wording, gunakan Bahasa Indonesia formal dan ringkas.

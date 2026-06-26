@@ -1,368 +1,117 @@
-# UniFlow AI Assistant - React Native
+# UniFlow AI Assistant
 
-Halaman AI Assistant untuk aplikasi UniFlow versi React Native.
+Dokumen ini menjelaskan implementasi AI Assistant terbaru di UniFlow Mobile. AI Assistant sekarang memakai backend chat session, bukan lagi respons lokal berbasis keyword.
 
-## 📁 Files
+## File Terkait
 
-- `components/AIAssistant.js` - Komponen utama AI Assistant
-- `styles/aiAssistantStyles.js` - Styles terpisah sesuai pattern UniFlow
-- `App.js` - Updated dengan routing ke AI Assistant
+| Path | Fungsi |
+| --- | --- |
+| `components/AIAssistant.js` | UI chat, drawer riwayat, sesi baru, hapus sesi, kirim pesan |
+| `styles/aiAssistantStyles.js` | Style khusus AI Assistant |
+| `services/api.js` | Endpoint chat session dan message |
+| `utils/errorHandler.js` | Normalisasi pesan error untuk UI |
+| `utils/waterQuality.js` | `parseLocalDate` untuk timestamp chat |
+| `App.js` | Routing screen `ai-assistant` |
 
-## 🎯 Fitur
+## Fitur
 
-- ✅ Chat interface dengan message bubbles (user & AI)
-- ✅ Typing indicator dengan animasi smooth
-- ✅ Suggested questions untuk pertanyaan umum
-- ✅ KeyboardAvoidingView untuk iOS & Android
-- ✅ Auto-scroll ke message terbaru
-- ✅ Max 500 karakter per message
-- ✅ Bahasa Indonesia untuk semua text
+- Membuat sesi chat baru otomatis jika belum ada sesi.
+- Memuat sesi terakhir saat halaman dibuka.
+- Drawer riwayat chat.
+- Buat chat baru.
+- Hapus sesi dengan modal konfirmasi.
+- Auto-scroll ke pesan terbaru.
+- Suggested questions saat percakapan masih kosong.
+- Batas input 500 karakter.
+- Loading indicator saat menunggu respons AI.
+- Error ditampilkan sebagai pesan ramah, bukan stack trace.
+- Judul sesi otomatis diperbarui dari pesan pertama user.
+- Markdown sederhana dari respons AI dibersihkan sebelum tampil di bubble.
 
-## 🚀 Cara Menggunakan
+## Endpoint Backend
 
-### 1. Import di App.js
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| `POST` | `/chat/sessions` | Membuat sesi chat |
+| `GET` | `/chat/sessions` | Mengambil daftar sesi |
+| `PATCH` | `/chat/sessions/:id` | Update judul sesi |
+| `PUT` | `/chat/sessions/:id` | Fallback update judul bila PATCH tidak tersedia |
+| `GET` | `/chat/sessions/:id/messages` | Mengambil pesan sesi |
+| `POST` | `/chat/sessions/:id/messages` | Mengirim pesan user dan menerima respons AI |
+| `DELETE` | `/chat/sessions/:id` | Menghapus sesi |
 
-```javascript
-import AIAssistant from './components/AIAssistant';
+Semua endpoint diakses melalui `services/api.js` dan `utils/apiClient.js`.
+
+## Alur Saat Halaman Dibuka
+
+1. `AIAssistant` memanggil `getAllChatSessions()`.
+2. Jika ada sesi, aplikasi memuat pesan dari sesi terbaru.
+3. Jika belum ada sesi, aplikasi membuat `Sesi Baru`.
+4. Jika request gagal, tampil layar error dengan tombol `Coba Lagi` dan `Kembali`.
+
+## Alur Kirim Pesan
+
+1. User mengisi input dan menekan tombol kirim.
+2. Pesan user langsung ditambahkan ke UI.
+3. `sendChatMessage(sessionId, userText)` dipanggil ke backend.
+4. Respons AI ditambahkan ke UI setelah markdown sederhana dibersihkan.
+5. Jika pesan tersebut adalah pesan pertama, judul sesi diperbarui dari isi pesan user.
+6. Riwayat sesi direfresh.
+
+## State Penting
+
+| State | Fungsi |
+| --- | --- |
+| `messages` | Daftar pesan yang sedang tampil |
+| `inputText` | Isi input user |
+| `isTyping` | Loading indicator respons AI |
+| `drawerOpen` | Status drawer riwayat |
+| `chatHistory` | Daftar sesi di drawer |
+| `currentSessionId` | Sesi aktif |
+| `isFirstMessage` | Penanda untuk update judul sesi |
+| `loadingSession` | Loading saat inisialisasi |
+| `sessionError` | Error saat memuat sesi |
+| `deleteTarget` | Target sesi yang akan dihapus |
+
+## Konvensi UI
+
+- Pesan user berada di kanan.
+- Pesan AI berada di kiri dengan avatar kecil.
+- Header memakai judul `UniFlow AI`.
+- Drawer menampilkan daftar `Riwayat Chat`.
+- Tombol `+ Baru` membuat sesi baru.
+- Tombol hapus sesi harus menampilkan konfirmasi.
+- Gunakan Bahasa Indonesia formal dan ringkas.
+
+## Error Handling
+
+Gunakan helper berikut:
+
+```js
+import { toUserMessage, logError } from '../utils/errorHandler';
 ```
 
-### 2. Tambahkan State & Handler
+Prinsip:
 
-```javascript
-const [currentScreen, setCurrentScreen] = useState('dashboard');
+- Jangan tampilkan error mentah dari fetch.
+- Log error dengan tag yang jelas untuk debugging.
+- Tampilkan pesan fallback yang mudah dipahami user.
+- Timeout pengiriman pesan AI diset lebih panjang di `sendChatMessage`, yaitu 45 detik.
 
-const handleNavigateToAI = () => {
-  setCurrentScreen('ai-assistant');
-};
-```
+## Suggested Questions
 
-### 3. Render Conditional
+Daftar pertanyaan awal ada di konstanta `SUGGESTED` pada `components/AIAssistant.js`.
 
-```javascript
-{currentScreen === 'ai-assistant' && (
-  <AIAssistant onBack={handleNavigateToDashboard} />
-)}
-```
+Saat menambah pertanyaan:
 
-### 4. Tambahkan Button di Dashboard
+- Gunakan Bahasa Indonesia.
+- Fokus pada kualitas air, WQI, pH, suhu, TDS, kekeruhan, PERMENKES, atau cara penggunaan UniFlow.
+- Hindari teks terlalu panjang agar pill tetap rapi di layar mobile.
 
-```javascript
-import { Ionicons } from '@expo/vector-icons';
+## Catatan Pengembangan
 
-// Di Dashboard header:
-<TouchableOpacity
-  onPress={onNavigateToAI}
-  style={styles.statusIndicator}
->
-  <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
-</TouchableOpacity>
-```
-
-## 🎨 Styling
-
-Semua styles mengikuti pattern UniFlow dengan file terpisah:
-
-```javascript
-// Import di AIAssistant.js:
-import { styles } from '../styles/aiAssistantStyles';
-
-// Import di aiAssistantStyles.js:
-import { colors } from '../constants/colors';
-```
-
-### Struktur Styles:
-
-- `container` - Main container
-- `header` - Header dengan back button & icon
-- `messagesContainer` - ScrollView untuk messages
-- `messageBubble` - Bubble untuk user & AI
-- `inputContainer` - Input area di bottom
-- `typingIndicator` - Animasi typing dots
-
-## 🤖 AI Response Logic
-
-AI menggunakan keyword matching untuk memberikan response:
-
-```javascript
-const generateAIResponse = (userMessage) => {
-  const lowerMessage = userMessage.toLowerCase();
-  
-  // pH
-  if (lowerMessage.includes('ph')) {
-    return 'Berdasarkan PERMENKES RI No. 32 Tahun 2017...';
-  }
-  
-  // Suhu
-  if (lowerMessage.includes('suhu')) {
-    return 'Suhu air yang ideal untuk air minum...';
-  }
-  
-  // ... dst
-};
-```
-
-### Topik yang Didukung:
-
-- pH Level
-- Suhu Air
-- Padatan Terlarut (TDS)
-- Kekeruhan (Turbidity)
-- Standar PERMENKES
-- Akurasi Sensor
-- Cara Penggunaan
-- Keamanan Air
-- History Data
-
-## 🔧 Kustomisasi
-
-### Menambah AI Response:
-
-```javascript
-const generateAIResponse = (userMessage) => {
-  const lowerMessage = userMessage.toLowerCase();
-  
-  if (lowerMessage.includes('keyword baru')) {
-    return 'Response untuk keyword baru disini';
-  }
-  
-  // ... existing responses
-};
-```
-
-### Mengubah Suggested Questions:
-
-```javascript
-const suggestedQuestions = [
-  'Pertanyaan baru 1?',
-  'Pertanyaan baru 2?',
-  'Pertanyaan baru 3?',
-  'Pertanyaan baru 4?',
-];
-```
-
-### Mengubah Delay Typing:
-
-```javascript
-setTimeout(() => {
-  // AI response
-}, 1500); // Ubah delay disini (ms)
-```
-
-### Mengubah Warna:
-
-Edit `/constants/colors.js`:
-
-```javascript
-export const colors = {
-  primary: {
-    main: '#7CB9D8', // Ubah warna primary
-    // ...
-  },
-  // ...
-};
-```
-
-## 📱 Platform Specific
-
-### iOS:
-
-```javascript
-<KeyboardAvoidingView
-  behavior="padding"
-  keyboardVerticalOffset={0}
->
-```
-
-### Android:
-
-```javascript
-<KeyboardAvoidingView
-  behavior="height"
-  keyboardVerticalOffset={20}
->
-```
-
-### Handling:
-
-```javascript
-Platform.OS === 'ios' ? 'padding' : 'height'
-```
-
-## 🎭 Animasi
-
-### Typing Indicator:
-
-Menggunakan Animated API dengan 3 dots yang bounce:
-
-```javascript
-const typingAnimation = useRef(new Animated.Value(0)).current;
-
-useEffect(() => {
-  if (isTyping) {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(typingAnimation, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(typingAnimation, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }
-}, [isTyping]);
-```
-
-### Auto Scroll:
-
-```javascript
-scrollViewRef.current?.scrollToEnd({ animated: true });
-```
-
-## 🧪 Testing
-
-Test dengan berbagai skenario:
-
-```javascript
-// 1. Empty input
-handleSend('');
-
-// 2. Normal question
-handleSend('Apa standar pH air minum?');
-
-// 3. Long text (max 500 chars)
-handleSend('Lorem ipsum dolor sit amet...');
-
-// 4. Special characters
-handleSend('pH 7.2 = aman? 😊');
-
-// 5. Multiple messages
-for (let i = 0; i < 10; i++) {
-  handleSend(`Message ${i}`);
-}
-```
-
-## 🚨 Common Issues
-
-### Issue: Gap property tidak bekerja di Android
-
-**Solution:**
-
-```javascript
-// Jangan:
-<View style={{ flexDirection: 'row', gap: 12 }}>
-
-// Gunakan:
-<View style={{ flexDirection: 'row' }}>
-  <View style={{ marginRight: 12 }} />
-  <View />
-</View>
-```
-
-### Issue: Keyboard menutupi input
-
-**Solution:**
-
-```javascript
-// Pastikan KeyboardAvoidingView setup benar
-// dan tambahkan keyboardVerticalOffset
-```
-
-### Issue: Scroll tidak smooth
-
-**Solution:**
-
-```javascript
-// Gunakan onContentSizeChange:
-<ScrollView
-  onContentSizeChange={() => 
-    scrollViewRef.current?.scrollToEnd({ animated: true })
-  }
->
-```
-
-## 🌐 Integrasi API Real (Optional)
-
-Untuk integrasi dengan AI API real (OpenAI, Gemini, dll):
-
-### 1. Install dependency:
-
-```bash
-npm install axios
-# atau
-yarn add axios
-```
-
-### 2. Update generateAIResponse:
-
-```javascript
-import axios from 'axios';
-
-const generateAIResponse = async (userMessage) => {
-  try {
-    const response = await axios.post('YOUR_AI_API_ENDPOINT', {
-      message: userMessage,
-      context: 'UniFlow water quality monitoring',
-    }, {
-      headers: {
-        'Authorization': 'Bearer YOUR_API_KEY',
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    return response.data.response;
-  } catch (error) {
-    console.error('AI API Error:', error);
-    // Fallback to mock response
-    return mockResponse(userMessage);
-  }
-};
-```
-
-### 3. Update handleSend menjadi async:
-
-```javascript
-const handleSend = async () => {
-  if (!inputText.trim()) return;
-  
-  // ... add user message
-  
-  setIsTyping(true);
-  
-  try {
-    const aiResponseText = await generateAIResponse(inputText);
-    
-    const aiResponse = {
-      id: (Date.now() + 1).toString(),
-      text: aiResponseText,
-      sender: 'ai',
-      timestamp: new Date(),
-    };
-    
-    setMessages((prev) => [...prev, aiResponse]);
-  } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    setIsTyping(false);
-  }
-};
-```
-
-## 📦 Dependencies
-
-```json
-{
-  "dependencies": {
-    "react-native": ">=0.70.0",
-    "@expo/vector-icons": "^13.0.0"
-  }
-}
-```
-
-## 📄 License
-
-Copyright © 2026 UniFlow Team. All rights reserved.
+- Jangan mengembalikan AI Assistant ke mode mock keyword kecuali untuk kebutuhan demo offline yang eksplisit.
+- Jangan memanggil `fetch` langsung dari komponen; tambahkan wrapper di `services/api.js`.
+- Jika format respons backend berubah, update parsing di `handleSend`.
+- Jika format pesan backend berubah, update `loadMessagesForSession`.
+- Jika backend belum mendukung `PATCH`, `updateChatSession` sudah punya fallback ke `PUT`.
